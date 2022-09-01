@@ -144,7 +144,7 @@ BEGIN {
             is_reading_cap  = 0;
             is_reading_cred = 0;
         }
-        if (body ~ "<div class=\"slideshow ") {
+        if (body ~ "<div class=\"slideshow " || body ~ "<div class=\"slideshow\">") {
             is_reading_slideshow = 1;
             body = "";
         } else if (body ~ "<use xlink:href=\"#slideshow-arrow-next\">" && is_reading_slideshow) {
@@ -204,8 +204,8 @@ BEGIN {
             if (caption != "")
                 caption = " \"" caption "\"";
             body = "![" get_argument_value(img, "credits") "](" get_argument_value(img, "src") caption ")";
-            if (article_img == "" && body != "![]()" && !is_reading_body)
-                article_img = body;
+            if (body != "![]()" && !is_reading_body)
+                article_img = article_img "\n" body;
         }
 
         if (is_reading_cred && body != "") {
