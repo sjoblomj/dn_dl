@@ -48,6 +48,7 @@ function article_to_pdf() {
 
   if [ ! -f imgs ]; then
     echo "No images found!"
+    echo
   else
     while read img; do
       imgname=$(echo "${img}" | sed 's|[/:]|_|g')
@@ -91,6 +92,8 @@ dir=$(pwd)
 
 download_article_list
 articles_to_pdf
+
+echo
 cd "${dir}"
 create_pdfs_by_year
 
