@@ -42,6 +42,7 @@
 }
 
 \renewcommand{\linethickness}{0.05em}
+\setlength{\headheight}{25pt}
 
 \makeatletter
 % we use \prefix@<level> only if it is defined
@@ -74,7 +75,7 @@
 \rule{\textwidth}{0.4pt}\par % Thin horizontal line
 
 \vspace{\drop} % Whitespace between the top lines and title
-\textsc{\Huge Andrev Walden}
+\textsc{\Huge #TITLE#}
 
 \vspace{0.71\drop} % Whitespace between the title and short horizontal line
 \rule{0.5\textwidth}{0.4pt}\par % Short horizontal line under the title
