@@ -12,7 +12,7 @@ To use the script, you must have a subscription to Dagens Nyheter. Your login in
 ### Firefox
 Make sure you are logged in to dn.se.
 
-[!Finding cookies](finding_cookies.png)
+![Finding cookies](finding_cookies.png)
 
 In Firefox, go to Tools -> Browser tools -> Web Developer Tools. Open the Network tab. Click on the GET request to domain www.dn.se. To the right, you have the Headers tab. Scroll down to the Request Headers, and find the request header named "Cookie". Copy this value, and open the file dn_header in a text editor. Replace "xxx" with the cookie you copied.
 
