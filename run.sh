@@ -2,11 +2,12 @@
 
 dn_adress="https://www.dn.se/av/andrev-walden/"
 page_title="Andrev Walden"
-download=0 #Convenience flag - turn off to use what has already been downloaded in previous runs
+download="n" #Convenience flag - turn off to use what has already been downloaded in previous runs
 
 function download_article_list() {
   offset=0
-  while [ $download -eq 1 ]; do
+  [ "$download" = "y" ] || [ ! -f "article_list" ] ; fetch_articles=$?
+  while [ "$fetch_articles" -eq 0 ]; do
     echo "Downloading $offset articles"
     curl -s --header "$(cat dn_header)" "${dn_adress}?offset=${offset}" | awk 'BEGIN{in_list = 0; url = ""; found_articles = 0;}{if ($0 ~ "<div class=\"timeline-page__listing\">") { url = ""; in_list = 1; } if ($0 ~ "<div class=\"pagination") in_list = 0; if ($0 ~ "<a href" && in_list) { sub(/ *<a href="/, "", $0); sub(/" .*/, "", $0); sub(/\/$/, "", $0); url = "https://www.dn.se" $0; } if ($0 ~ "<time " && in_list) { sub(/.*="/, "", $0); sub(/T.*/, "", $0); print $0 " " url >> "article_list"; found_articles = 1;}} END{if (!found_articles) exit 1;}'
     RESULT=$?
@@ -41,7 +42,8 @@ function article_to_pdf() {
   cd "${date}_${name}"
   echo "${date} - ${name}"
 
-  if [ $download -eq 1 ]; then
+  [ "$download" = "y" ] || [ ! -f "article.html" ] ; fetch_article=$?
+  if [ "$fetch_article" -eq 0 ]; then
     curl -L -s --header "$(cat ../../dn_header)" "${url}" > article.html
   fi
   ../../parser.awk article.html > article.md
@@ -52,7 +54,8 @@ function article_to_pdf() {
   else
     while read img; do
       imgname=$(echo "${img}" | sed 's|[/:]|_|g')
-      if [ $download -eq 1 ]; then
+      [ "$download" = "y" ] || [ ! -f "$imgname" ] ; fetch_img=$?
+      if [ "$fetch_img" -eq 0 ]; then
         curl -s -L --retry 5 "${img}" -o "${imgname}"
         convert "${imgname}" -quality 50% -resize 50% "${imgname}"
       fi
