@@ -7,7 +7,7 @@ Given a URL to an author on dn.se, all their articles will be downloaded. The do
 
 
 ## Cookie
-To use the script, you must have a subscription to Dagens Nyheter. Your login information is stored in a cookie and sent by the browser to the site, which is how it can identify that you have access to the pages behind the paywall. You need to provide this cookie to the script. How to obtain the cookie depends on your browser.
+To use the script, you must have a subscription to Dagens Nyheter. Your login information is stored in a cookie and sent by the browser to the site, which is how it can identify that you have access to the pages behind the paywall. You need to provide this cookie to the script by putting it into the file `dn_header`. How to obtain the cookie depends on your browser.
 
 ### Firefox
 Make sure you are logged in to dn.se.
