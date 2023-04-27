@@ -1,6 +1,8 @@
 #!/bin/awk -f
 
 BEGIN {
+    debug = 0;
+
     title       = "";
     published   = "";
     updated     = "";
@@ -19,14 +21,12 @@ BEGIN {
     is_reading_ad        = 0;
     is_reading_embed     = 0;
     is_reading_img       = 0;
-    is_reading_img_cap   = 0;
-    is_reading_img_cred  = 0;
+    is_reading_cap       = 0;
     is_reading_quote     = 0;
     is_reading_factbox   = 0;
-    is_reading_fb_title  = 0;
-    is_reading_fb_cont   = 0;
     is_reading_slideshow = 0;
-    is_closing_slideshow = 0;
+    slideshow_divs = 0;
+    factbox_divs   = 0;
 }
 {
     if ($0 ~ " *<article")
@@ -34,41 +34,51 @@ BEGIN {
 
     if (is_reading_article) {
         keyword = "data-seo-title";
-        if ($0 ~ "<article .* " keyword)
+        if ($0 ~ "<article .* " keyword) {
             title = get_argument_value($0, keyword);
-        if ($0 ~ "<time class=\"time time--updated\"")
+            if (debug) print "Read title '" title "'" > "/dev/stderr"
+        }
+        if ($0 ~ "<time class=\"time time--updated\"") {
             updated = get_argument_value($0, "datetime");
-        if ($0 ~ "<time class=\"time time--published\"")
+            if (debug) print "Read updated '" updated "'" > "/dev/stderr"
+        }
+        if ($0 ~ "<time class=\"time time--published\"") {
             published = get_argument_value($0, "datetime");
+            if (debug) print "Read published '" published "'" > "/dev/stderr"
+        }
         if ($0 ~ "<div class=\"article__lead\">") {
             lead = $0;
             sub(/ *<div class="article__lead">/, "", lead);
             sub(/<\/div>/, "", lead);
+            if (debug) print "Read lead '" lead "'" > "/dev/stderr"
         }
 
         body = trim($0);
-        if (body ~ "<aside class=\"fact-box") {
+        if (body ~ "<div" && is_reading_factbox) {
+            factbox_divs = factbox_divs + 1;
+        }
+        if (body ~ "</div>" && is_reading_factbox) {
+            factbox_divs = factbox_divs - 1;
+        }
+        if (body ~ "<div class=\"ds-factbox\">") {
+            if (debug) print "Is reading factbox" > "/dev/stderr"
             is_reading_factbox  = 1;
+            factbox_divs = factbox_divs + 1;
             body = "";
-        } else if (body ~ "</aside>") {
+        } else if (body ~ "</div>" && is_reading_factbox && factbox_divs == 0) {
+            if (debug) print "No longer reading factbox" > "/dev/stderr"
             is_reading_factbox  = 0;
             body = factbox;
-        } else if (body ~ "<div class=\"fact-box__container\">") {
-            is_reading_fb_cont  = 1;
+        } else if (body ~ "<h2" && is_reading_factbox) {
+            sub(/ *<h2 class="ds-factbox__title">/, "", body);
+            sub(/<\/h2>/, "", body);
+            fb_title = body;
             body = "";
-        } else if (body ~ "<h2>" && is_reading_fb_cont) {
-            is_reading_fb_title = 1;
-            body = "";
-        } else if (body ~ "</h2>" && is_reading_fb_title) {
-            is_reading_fb_title = 0;
-            body = "";
-        } else if (is_reading_fb_title) {
-            fb_title = fb_title body;
-            body = "";
-        } else if (body ~ "</div>" && is_reading_fb_cont) {
-            is_reading_fb_cont = 0;
-            body = "";
-        } else if (is_reading_fb_cont) {
+            if (debug) print "Read fb_title" fb_title > "/dev/stderr"
+        } else if (body ~ "<div class=\"ds-factbox__body\">" && is_reading_factbox) {
+            sub(/ *<div class="ds-factbox__body">/, "", body);
+            sub(/<\/div>/, "", body);
+
             delim = "\n";
             if (factbox == "") {
                 factbox = "| " fb_title " |\n| ";
@@ -80,92 +90,130 @@ BEGIN {
             gsub(/<\/p>/, " |\n", body);
             factbox = factbox delim body;
             body = "";
-        } else if (is_reading_factbox)
+            if (debug) print "Read factbox: '" factbox "'" > "/dev/stderr"
+        } else if (is_reading_factbox) {
+            if (debug) print "Is reading factbox" > "/dev/stderr"
             body = "";
+        }
 
-        if (body ~ "<div class=\"author__info\">") {
+        if (body ~ "<div class=\"ds-byline__titles\">") {
+            if (debug) print "Is reading author" > "/dev/stderr"
             is_reading_author = 1;
-
-        } else if (body ~ "<a class=\"author__name\"" && is_reading_author) {
-            auth = transform_hyperlink(body);
             body = "";
 
-        } else if (body ~ "<span class=\"author__role\">" && is_reading_author) {
-            role = substr(body, index(body, ">") + 1);
-            auth = auth " (" substr(role, 0, index(role, "</span>") - 1) ")";
+        } else if (body ~ "<span class=\"ds-byline__title\">" && is_reading_author) {
+            sub(/<span class="ds-byline__title">/, "", body);
+            sub(/<\/span>/, "", body);
+            auth = body;
             body = "";
+            if (debug) print "Read author '" auth "'" > "/dev/stderr"
+
+        } else if (body ~ "<span class=\"ds-byline__subtitle\">" && is_reading_author) {
+            sub(/<span class="ds-byline__subtitle">/, "", body);
+            sub(/<\/span>/, "", body);
+            auth = auth " (" body ")";
+            body = "";
+            if (debug) print "Read author '" auth "'" > "/dev/stderr"
 
         } else if (body ~ "</div>" && is_reading_author) {
             is_reading_author = 0;
             body = "";
             delim = (authors != "") ? ", " : "";
             authors = authors delim auth;
+            if (debug) print "No longer reading author. authors '" authors "'" > "/dev/stderr"
         }
 
         if (body ~ "<blockquote " && !is_reading_embed) {
+            if (debug) print "Is reading quote" > "/dev/stderr"
             is_reading_quote = 1;
             body = "";
-        } else if (body ~ "<div class=" && is_reading_quote) {
+        } else if (body ~ "<span class=\"ds-quote__border\"></span>" && is_reading_quote) {
+            if (debug) print "Is continuing to read quote" > "/dev/stderr"
             body = "";
         } else if (body ~ "</blockquote>") {
+            if (debug) print "No longer reading quote" > "/dev/stderr"
             is_reading_quote = 0;
             body = "";
         } else if (body != "" && is_reading_quote) {
+            if (debug) print "Putting '> ' in front of body" > "/dev/stderr"
             body = "> " body;
         }
 
         if (body ~ "<div class=\"article__body\">") {
+            if (debug) print "Is reading body" > "/dev/stderr"
             is_reading_body = 1;
             body = "";
         }
         if (body ~ "<footer class=\"article__footer\">") {
+            if (debug) print "No longer reading body or article" > "/dev/stderr"
             is_reading_body = 0;
             is_reading_article = 0;
         }
 
         if (body ~ "<div class=\"ad") {
+            if (debug) print "Is reading ad" > "/dev/stderr"
             is_reading_ad = 1;
             body = "";
         }
         if (body == "</div>" && is_reading_ad) {
+            if (debug) print "No longer reading ad" > "/dev/stderr"
             is_reading_ad = 0;
             body = "";
         }
         if (body ~ "<div class=\"embed-widget") {
+            if (debug) print "Is reading embed" > "/dev/stderr"
             is_reading_embed = 1;
             body = "";
         } else if (body ~ "</div>" && is_reading_embed) {
+            if (debug) print "No longer reading embed" > "/dev/stderr"
             is_reading_embed = 0;
             body = "";
         }
 
         if (is_reading_slideshow) {
-            is_reading_img  = 0;
-            is_reading_cap  = 0;
-            is_reading_cred = 0;
+            if (debug) print "Resetting is_reading_img, is_reading_cap" > "/dev/stderr"
+            is_reading_img = 0;
+            is_reading_cap = 0;
         }
+        if (body ~ "<div" && is_reading_slideshow) {
+            slideshow_divs = slideshow_divs + 1;
+            if (debug) print "slideshow_divs: " slideshow_divs > "/dev/stderr"
+        }
+        if (body ~ "</div" && is_reading_slideshow) {
+            slideshow_divs = slideshow_divs - 1;
+            if (debug) print "slideshow_divs: " slideshow_divs > "/dev/stderr"
+        }
+
         if (body ~ "<div class=\"slideshow " || body ~ "<div class=\"slideshow\">") {
+            if (debug) print "Is reading slideshow" > "/dev/stderr"
             is_reading_slideshow = 1;
+            slideshow_divs = slideshow_divs + 1;
             body = "";
-        } else if (body ~ "<use xlink:href=\"#slideshow-arrow-next\">" && is_reading_slideshow) {
+        } else if (body ~ "<i class=\"ds-icon ds-icon--arrow_forward\">" && is_reading_slideshow) {
+            if (debug) print "Is closing slideshow" > "/dev/stderr"
             is_closing_slideshow = 1;
             body = "";
-        } else if (body ~ "</div>" && is_closing_slideshow) {
+        } else if (body ~ "</div>" && is_reading_slideshow && slideshow_divs == 0) {
+            if (debug) print "No longer reading slideshow" > "/dev/stderr"
             is_reading_slideshow = 0;
-            is_closing_slideshow = 0;
             body = "";
-        } else if (body ~ "<div class=\"slideshow__image-author\">" && is_reading_slideshow) {
-            is_reading_cred = 1;
-            body = substr(body, index(body, ">") + 1);
-            body = substr(body, 0, index(body, "<") - 1);
-        } else if (body ~ "<span class=\"slideshow__caption-text\"" && is_reading_slideshow) {
+        } else if (body ~ "<span class=\"ds-article-image__credits\">" && is_reading_slideshow) {
+            if (debug) print "Is reading cred" > "/dev/stderr"
             is_reading_cap = 1;
-        } else if (body ~ "<img" && is_reading_slideshow) {
-            is_reading_img = 1;
-        } else if (body !~ "</figure" && is_reading_slideshow)
+        } else if (body ~ "<figcaption class=\"ds-image-caption slideshow__caption\">" && is_reading_slideshow) {
+            if (debug) print "Is reading cap" > "/dev/stderr"
+            is_reading_cap = 1;
             body = "";
+        } else if (body ~ "<img" && is_reading_slideshow) {
+            if (debug) print "Is reading img" > "/dev/stderr"
+            is_reading_img = 1;
+        } else if (body !~ "</figure" && is_reading_slideshow) {
+            if (debug) print "Is reading slideshow and skipping line" > "/dev/stderr"
+            body = "";
+        }
 
-        if (body ~ "<figure class=\"article__img" || (body ~ "<figure class=\"slideshow__figure\">" && is_reading_slideshow)) {
+        if (body ~ "<figure class=\"ds-article-image" || (body ~ "<figure class=\"slideshow__figure\">" && is_reading_slideshow)) {
+            if (debug) print "Is reading img" > "/dev/stderr"
             is_reading_img = 1;
             body = "";
         }
@@ -178,24 +226,35 @@ BEGIN {
 
             img  = "<img src=\"" src "\"";
             body = "";
+            if (debug) print "Is reading img: '" img "'" > "/dev/stderr"
         }
-        if ((body ~ "<div class=\"picture" || body ~ "</div>") && is_reading_img)
+        if ((body ~ "<div class=\"picture" || body ~ "<div class=\"ds-full-width-element\">" || body ~ "</div>") && is_reading_img) {
+            if (debug) print "Is reading img, skipping line" > "/dev/stderr"
             body = "";
+        }
         if (body ~ "<figcaption" && is_reading_img) {
+            if (debug) print "Is reading cap" > "/dev/stderr"
             is_reading_cap = 1;
             body = "";
         }
         if (body ~ "</figcaption>" && is_reading_img) {
+            if (debug) print "No longer reading cap" > "/dev/stderr"
             is_reading_cap = 0;
             body = "";
         }
-        if (body ~ "<span class=\"article__img-credits\">" && is_reading_cap) {
-            is_reading_cred = 1;
+        if (body ~ "<span aria-hidden=\"true\">" && is_reading_cap) {
+            body = substr(body, index(body, ">") + 1);
+            body = substr(body, 0, index(body, "<") - 1);
+            img  = img " caption=\"" body "\"";
             body = "";
+            if (debug) print "Is reading caption, img: '" img "'" > "/dev/stderr"
         }
-        if (body ~ "</span>" && is_reading_cred) {
-            is_reading_cred = 0;
+        if (body ~ "<span class=\"ds-article-image__credits\">" && is_reading_cap) {
+            body = substr(body, index(body, ">") + 1);
+            body = substr(body, 0, index(body, "<") - 1);
+            img  = img " credits=\"" body "\"";
             body = "";
+            if (debug) print "Is reading cred, img: '" img "'" > "/dev/stderr"
         }
         if (body ~ "</figure>") {
             is_reading_img = 0;
@@ -206,23 +265,18 @@ BEGIN {
             body = "![" get_argument_value(img, "credits") "](" get_argument_value(img, "src") caption ")";
             if (body != "![]()" && !is_reading_body)
                 article_img = article_img "\n" body;
+            if (debug) print "Read figure '" body "', article_img '" article_img "'" > "/dev/stderr"
         }
 
-        if (is_reading_cred && body != "") {
-            img  = img " credits=\"" body "\"";
-            body = "";
-        } else if (is_reading_cap && body != "") {
-            pos  = index(body, ">");
-            if (pos > 0) { #Assume this means the text is wrapped in html
-                body = substr(body, pos + 1);
-                body = substr(body, 0, index(body, "<") - 1);
-            }
-            img  = img " caption=\"" body "\"";
-            body = "";
+        if (body ~ "<div class=\"ds-thematic-break\"><hr></div>") {
+            if (debug) print "Substituting thematic break" > "/dev/stderr"
+            body = "***"
         }
 
-        if (is_reading_body && !is_reading_ad && !is_reading_embed && body != "" && body != "</div>")
+        if (is_reading_body && !is_reading_ad && !is_reading_embed && body != "" && body != "</div>") {
+            if (debug) print "Appending into article" > "/dev/stderr"
             article = article "\n" transform_hyperlink(body);
+        }
     }
 
     if ($0 ~ " *</article")
