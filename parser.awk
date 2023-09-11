@@ -136,7 +136,7 @@ BEGIN {
             body = "";
         } else if (body != "" && Is_reading_quote) {
             if (Debug) print "Putting '> ' in front of body" > "/dev/stderr"
-            body = "> " body;
+            body = "> *" body "*";
         }
 
         if (body ~ "<div class=\"article__body\">") {
