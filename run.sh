@@ -1,16 +1,145 @@
 #!/bin/bash
 
-dn_adress="https://www.dn.se/av/andrev-walden/"
-page_title="Andrev Walden"
-download="n" #Convenience flag - turn off to use what has already been downloaded in previous runs
-use_smaller_images_if_better="y" #Compiles each article twice in order to see if the article requires fewer pages if its images were slightly smaller
+first_year=1864
+dn_address="" # "https://www.dn.se/av/andrev-walden/"
+page_title="" # "Andrev Walden"
+cookie=""
+download="n"
+use_smaller_images_if_better="n"
+preserve_img_quality="n"
+divide_by_year="n"
+format="pdf"
+output_dir=""
 
-function download_article_list() {
+print_help() {
+    echo "dn_dl 2.0 by Johan Sjöblom"
+    echo "Parses and downloads articles from the Swedish"
+    echo "newspaper Dagens Nyheter. Can output into Markdown or"
+    echo "PDFs."
+    echo ""
+    echo "Parameters:"
+    echo "  --url \"URL\""
+    echo "    Mandatory param. URL to download from."
+    echo ""
+    echo "  --cookie \"COOKIE\""
+    echo "    Mandatory param. The Request Header Cookie that"
+    echo "    your browser uses to access dn.se"
+    echo ""
+    echo "  --invalidate-cache"
+    echo "    Optional param. Download articles, even if they"
+    echo "    have been downloaded previously."
+    echo ""
+    echo "  --use-smaller-images-if-better-for-pdf"
+    echo "    Optional param. Attempt to downsize images"
+    echo "    somewhat in the PDF, if that results in fewer"
+    echo "    pages. If not, the original size is kept. This"
+    echo "    option will run multiple passes of creating"
+    echo "    PDFs. Only relevant for --output=\"pdf\""
+    echo ""
+    echo "  --preserve-image-quality"
+    echo "    Optional param. Keep the original image quality."
+    echo ""
+    echo "  --page-title \"PAGE TITLE\""
+    echo "    Mandatory param. Title of page."
+    echo ""
+    echo "  --divide-by-year"
+    echo "    Optional param. Collects articles into separate"
+    echo "    files by year."
+    echo ""
+    echo "  --format \"[pdf|markdown]\""
+    echo "    Mandatory param. Which format to output to."
+    echo ""
+    echo "  --output-dir \"DIRECTORY\""
+    echo "    Mandatory param. Directory to save output into."
+}
+
+print_error_and_quit() {
+    echo "${1}"
+    echo ""
+    print_help
+    exit 1
+}
+
+
+argv=("$@")
+ignore_arg=0
+for (( i=0; i<$#; i++ )); do
+    arg="${argv[i]}"
+    if [ $ignore_arg -gt 0 ]; then
+        : $((ignore_arg--))
+        continue
+    fi
+    case "$arg" in
+    -h)
+        ;&  # Fall through
+    --help)
+        print_help
+        exit 0
+        ;;
+    --url)
+        dn_address="${argv[i+1]}"
+        ignore_arg=1
+        ;;
+    --cookie)
+        cookie="${argv[i+1]}"
+        if [[ "$cookie" != Cookie:* ]]; then
+            echo "The cookie should start with 'Cookie: '"
+            exit 1
+        fi
+        ignore_arg=1
+        ;;
+    --invalidate-cache)
+        download="y"
+        ;;
+    --use-smaller-images-if-better-for-pdf)
+        use_smaller_images_if_better="y"
+        ;;
+    --preserve-image-quality)
+        preserve_img_quality="y"
+        ;;
+    --page-title)
+        page_title="${argv[i+1]}"
+        ignore_arg=1
+        ;;
+    --divide-by-year)
+        divide_by_year="y"
+        ;;
+    --format)
+        f="${argv[i+1]}"
+        if [ "$f" == "pdf" ] || [ "$f" == "markdown" ]; then
+            format="$f"
+        else
+            print_error_and_quit "Unknown value given to format parameter: '$f'"
+        fi
+        ignore_arg=1
+        ;;
+    --output-dir)
+        output_dir="${argv[i+1]}"
+        ignore_arg=1
+        ;;
+    *)
+        print_error_and_quit "Unknown parameter: '$arg'"
+        ;;
+    esac
+done
+
+if [ "${dn_address}" == "" ]; then
+    print_error_and_quit "Missing required parameter 'url'"
+elif [ "${page_title}" == "" ]; then
+    print_error_and_quit "Missing required parameter 'page-title'"
+elif [ "${output_dir}" == "" ]; then
+    print_error_and_quit "Missing required parameter 'output-dir'"
+elif [ "${cookie}" == "" ]; then
+    print_error_and_quit "Missing required parameter 'cookie'"
+fi
+
+
+download_article_list() {
   offset=0
   [ "$download" = "y" ] || [ ! -f "article_list" ] ; fetch_articles=$?
   while [ "$fetch_articles" -eq 0 ]; do
     echo "Downloading $offset articles"
-    curl -s --header "$(cat dn_header)" "${dn_adress}?offset=${offset}" | awk 'BEGIN{in_list = 0; url = ""; found_articles = 0;}{if ($0 ~ "<div class=\"timeline-page__listing\">") { url = ""; in_list = 1; } if ($0 ~ "<div class=\"pagination") in_list = 0; if ($0 ~ "<a href" && in_list) { sub(/ *<a href="/, "", $0); sub(/" .*/, "", $0); sub(/\/$/, "", $0); url = "https://www.dn.se" $0; } if ($0 ~ "<time " && in_list) { sub(/.*="/, "", $0); sub(/T.*/, "", $0); print $0 " " url >> "article_list"; found_articles = 1;}} END{if (!found_articles) exit 1;}'
+    curl -s --header "${cookie}" "${dn_adress}?offset=${offset}" | awk 'BEGIN{in_list = 0; url = ""; found_articles = 0;}{if ($0 ~ "<div class=\"timeline-page__listing\">") { url = ""; in_list = 1; } if ($0 ~ "<div class=\"pagination") in_list = 0; if ($0 ~ "<a href" && in_list) { sub(/ *<a href="/, "", $0); sub(/" .*/, "", $0); sub(/\/$/, "", $0); url = "https://www.dn.se" $0; } if ($0 ~ "<time " && in_list) { sub(/.*="/, "", $0); sub(/T.*/, "", $0); print $0 " " url >> "article_list"; found_articles = 1;}} END{if (!found_articles) exit 1;}'
     RESULT=$?
     if [ $RESULT -ne 0 ]; then
       break
@@ -19,7 +148,7 @@ function download_article_list() {
   done
 }
 
-function find_image_size() {
+find_image_size() {
   date="${1}"
   name="${2}"
   prevdir=$(pwd)
@@ -48,14 +177,19 @@ function find_image_size() {
   fi
  }
 
-function create_latex() {
+create_latex() {
   date="${1}"
   name="${2}"
+  previous_dir=$(pwd)
+  cd "${date}_${name}"
 
   # cmark-gfm doesn't do a good job with Latex images; do a hacky manual override
   sed -i -E "s/\!\[(.*)\]/@£\1¤/g" article.md
 
   cmark-gfm -e table --table-prefer-style-attributes --to latex article.md > "${name}.tex"
+
+  # Reset image hack
+  sed -i -E "s/@£(.*)¤/![\1]/g" article.md
 
   # Recreate proper images and tables
   sed -i -E "s/@£(.*)¤\(([^ ]*) ?(.*)\)/\\\\begin\{figure\}\[ht\!\]\n\\\\centering\n\\\\includegraphics\[width=0.95\\\\textwidth\]\{${date}_${name}\/\2\}\n\\\\caption\{\3 \1\}\n\\\\end\{figure\}/g" "${name}.tex"
@@ -66,9 +200,10 @@ function create_latex() {
   if [ "$use_smaller_images_if_better" = "y" ]; then
     find_image_size "${date}" "${name}"
   fi
+  cd "${previous_dir}"
 }
 
-function article_to_pdf() {
+download_article_and_imgs() {
   date="${1}"
   url="${2}"
   name="${url##*/}"
@@ -79,7 +214,7 @@ function article_to_pdf() {
 
   [ "$download" = "y" ] || [ ! -f "article.html" ] ; fetch_article=$?
   if [ "$fetch_article" -eq 0 ]; then
-    curl -L -s --header "$(cat ../../dn_header)" "${url}" > article.html
+    curl -L -s --header "${cookie}" "${url}" > article.html
   fi
   ../../parser.awk article.html > article.md
 
@@ -92,37 +227,43 @@ function article_to_pdf() {
       [ "$download" = "y" ] || [ ! -f "$imgname" ] ; fetch_img=$?
       if [ "$fetch_img" -eq 0 ]; then
         curl -s -L --retry 5 "${img}" -o "${imgname}"
-        convert "${imgname}" -quality 50% -resize 50% "${imgname}"
+        if [ "$preserve_img_quality" = "n" ]; then
+          convert "${imgname}" -quality 50% -resize 50% "${imgname}"
+        fi
       fi
     done < imgs
   fi
-
-  create_latex "${date}" "${name}"
   cd "$previous_dir"
 }
 
-function articles_to_pdf() {
-  mkdir -p articles
+download_and_process_articles() {
+  mkdir -p "${output_dir}"
   prevdir=$(pwd)
-  cd articles
+  cd "${output_dir}"
 
   while read date url; do
-    article_to_pdf "$date" "$url"
+    download_article_and_imgs "$date" "$url"
+    if [ "${format}" == "pdf" ]; then
+      create_latex "$date" "$url"
+    fi
   done < ../article_list
 
   cd "$prevdir"
 }
 
-function create_pdfs_by_year() {
-  cd articles
-  for y in $(seq 1864 $(date +%Y)); do
+create_pdfs_by_year() {
+  cd "${output_dir}"
+  for y in $(seq $first_year $(date +%Y)); do
     if ls $y-* 1> /dev/null 2>&1; then
-      ls -1 $y-*/*.tex | sed 's/^/\\include{/' | sed 's/$/}/' > $y.tex
-      cat ../latex_defs.tex | sed 's/#TITLE#/'"${page_title}"'/g' | sed 's/#YEAR#/'"$y"'/g' > articles_$y.tex
 
-      for i in $(seq 1 2); do
-        xelatex articles_$y.tex
-      done
+      if [ "${format}" == "pdf" ]; then
+        ls -1 $y-*/*.tex | sed 's/^/\\include{/' | sed 's/$/}/' > $y.tex
+        cat ../latex_defs.tex | sed 's/#TITLE#/'"${page_title}"'/g' | sed 's/#YEAR#/'"$y"'/g' > articles_$y.tex
+
+        for i in $(seq 1 2); do
+          xelatex articles_$y.tex
+        done
+      fi
     fi
   done
 }
@@ -130,10 +271,12 @@ function create_pdfs_by_year() {
 dir=$(pwd)
 
 download_article_list
-articles_to_pdf
+download_and_process_articles
 
-echo
-cd "${dir}"
-create_pdfs_by_year
+if [ "$divide_by_year" = "y" ]; then
+  echo
+  cd "${dir}"
+  create_pdfs_by_year
+fi
 
 cd "${dir}"
