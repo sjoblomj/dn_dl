@@ -34,7 +34,7 @@ print_help() {
     echo "    somewhat in the PDF, if that results in fewer"
     echo "    pages. If not, the original size is kept. This"
     echo "    option will run multiple passes of creating"
-    echo "    PDFs. Only relevant for --output=\"pdf\""
+    echo "    PDFs. Only relevant for --output \"pdf\""
     echo ""
     echo "  --preserve-image-quality"
     echo "    Optional param. Keep the original image quality."
@@ -251,7 +251,7 @@ download_and_process_articles() {
   cd "$prevdir"
 }
 
-create_pdfs_by_year() {
+create_output_groups_by_year() {
   cd "${output_dir}"
   for y in $(seq $first_year $(date +%Y)); do
     if ls $y-* 1> /dev/null 2>&1; then
@@ -276,7 +276,7 @@ download_and_process_articles
 if [ "$divide_by_year" = "y" ]; then
   echo
   cd "${dir}"
-  create_pdfs_by_year
+  create_output_groups_by_year
 fi
 
 cd "${dir}"
