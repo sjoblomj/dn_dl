@@ -149,68 +149,65 @@ download_article_list() {
 }
 
 find_image_size() {
-  date="${1}"
-  name="${2}"
+  dirname="${1}"
+  date="${dirname%%_*}" # Remove everything after '_'
   prevdir=$(pwd)
   tmpdir=$(mktemp --directory)
-  cat ../../latex_defs.tex | sed 's/#TITLE#/'"${page_title}"'/g' | sed 's/#YEAR#/'"$name"'/g' | sed 's/tableofcontents/tableofcontents\n\\newpage/g' > article.tex
+  cat ../../latex_defs.tex | sed 's/#TITLE#/'"${page_title}"'/g' | sed 's/#YEAR#/'"$date"'/g' | sed 's/tableofcontents/tableofcontents\n\\newpage/g' > article.tex
   cp * "$tmpdir"
   rm article.tex
   cd "$tmpdir"
 
-  mkdir "$date"_"$name"
+  mkdir "$dirname"
   while read img; do
     imgname=$(echo "${img}" | sed 's|[/:]|_|g')
-    mv "$imgname" "$date"_"$name"
+    mv "$imgname" "$dirname"
   done < imgs
 
   xelatex article.tex 1> /dev/null
   pages_big=$(pdfinfo article.pdf | awk '/^Pages:/ {print $2}')
-  sed -i 's/includegraphics\[width=0.95/includegraphics\[width=0.85/g' $name.tex
+  sed -i 's/includegraphics\[width=0.95/includegraphics\[width=0.85/g' $dirname.tex
   xelatex article.tex 1> /dev/null
   pages_small=$(pdfinfo article.pdf | awk '/^Pages:/ {print $2}')
   cd "$prevdir"
   rm -r $tmpdir
 
   if (( $pages_big > $pages_small )); then
-    sed -i 's/includegraphics\[width=0.95/includegraphics\[width=0.85/g' $name.tex
+    sed -i 's/includegraphics\[width=0.95/includegraphics\[width=0.85/g' $dirname.tex
   fi
  }
 
 create_latex() {
-  date="${1}"
-  name="${2}"
+  dirname="${1}"
   previous_dir=$(pwd)
-  cd "${date}_${name}"
+  cd "${dirname}"
 
   # cmark-gfm doesn't do a good job with Latex images; do a hacky manual override
   sed -i -E "s/\!\[(.*)\]/@£\1¤/g" article.md
 
-  cmark-gfm -e table --table-prefer-style-attributes --to latex article.md > "${name}.tex"
+  cmark-gfm -e table --table-prefer-style-attributes --to latex article.md > "${dirname}.tex"
 
   # Reset image hack
   sed -i -E "s/@£(.*)¤/![\1]/g" article.md
 
   # Recreate proper images and tables
-  sed -i -E "s/@£(.*)¤\(([^ ]*) ?(.*)\)/\\\\begin\{figure\}\[ht\!\]\n\\\\centering\n\\\\includegraphics\[width=0.95\\\\textwidth\]\{${date}_${name}\/\2\}\n\\\\caption\{\3 \1\}\n\\\\end\{figure\}/g" "${name}.tex"
-  sed -i -E "s/\\\\begin\{tabular\}\{l\}/\\\\centering\\\\begin\{tabular\}\{\|p\{0.8\\\\linewidth\}\|\}\\\\hline\\\\\\\\/g" "${name}.tex"
-  sed -i -E "s/\\\\end\{tabular\}/\\\\hline\n\\\\end\{tabular\}/g" "${name}.tex"
-  cat "${name}.tex" | awk 'BEGIN{in_head = 0;}{if ($0 ~ "\\\\section") { in_head = 1; print $0; } else if ($0 ~ "\\\\rule") { in_head = 0; print $0; } else if (in_head && $0 ~ "Av: ") print "\\begin{center}\\small{" $0 "\\\\"; else if (in_head && $0 ~ "Publicerad: ") print $0 "}\\end{center}"; else print $0;}' > tmp.tex && mv tmp.tex "${name}.tex"
+  sed -i -E "s/@£(.*)¤\(([^ ]*) ?(.*)\)/\\\\begin\{figure\}\[ht\!\]\n\\\\centering\n\\\\includegraphics\[width=0.95\\\\textwidth\]\{${dirname}\/\2\}\n\\\\caption\{\3 \1\}\n\\\\end\{figure\}/g" "${dirname}.tex"
+  sed -i -E "s/\\\\begin\{tabular\}\{l\}/\\\\centering\\\\begin\{tabular\}\{\|p\{0.8\\\\linewidth\}\|\}\\\\hline\\\\\\\\/g" "${dirname}.tex"
+  sed -i -E "s/\\\\end\{tabular\}/\\\\hline\n\\\\end\{tabular\}/g" "${dirname}.tex"
+  cat "${dirname}.tex" | awk 'BEGIN{in_head = 0;}{if ($0 ~ "\\\\section") { in_head = 1; print $0; } else if ($0 ~ "\\\\rule") { in_head = 0; print $0; } else if (in_head && $0 ~ "Av: ") print "\\begin{center}\\small{" $0 "\\\\"; else if (in_head && $0 ~ "Publicerad: ") print $0 "}\\end{center}"; else print $0;}' > tmp.tex && mv tmp.tex "${dirname}.tex"
 
   if [ "$use_smaller_images_if_better" = "y" ]; then
-    find_image_size "${date}" "${name}"
+    find_image_size "${dirname}"
   fi
   cd "${previous_dir}"
 }
 
 download_article_and_imgs() {
-  date="${1}"
+  dirname="${1}"
   url="${2}"
-  name="${url##*/}"
   previous_dir=$(pwd)
-  mkdir -p "${date}_${name}"
-  cd "${date}_${name}"
-  echo "${date} - ${name}"
+  mkdir -p "${dirname}"
+  cd "${dirname}"
 
   [ "$download" = "y" ] || [ ! -f "article.html" ] ; fetch_article=$?
   if [ "$fetch_article" -eq 0 ]; then
@@ -242,9 +239,13 @@ download_and_process_articles() {
   cd "${output_dir}"
 
   while read date url; do
-    download_article_and_imgs "$date" "$url"
+    name="${url##*/}"
+    dirname="${date}_${name}"
+    echo "${date} - ${name}"
+
+    download_article_and_imgs "${dirname}" "${url}"
     if [ "${format}" == "pdf" ]; then
-      create_latex "$date" "$url"
+      create_latex "${dirname}" "$url"
     fi
   done < ../article_list
 
