@@ -34,4 +34,4 @@ The following tools are needed to run the script:
 
 ## Legal
 
-This script requires you to have a subscription to Dagens Nyheter - you cannot use it to obtain articles you don't have access to. These scripts are provided for personal use; all articles you download are copyrighted to Dagens Nyheter AB and may not be distributed to anyone without their permission. The scripts are for personal use only for already paying customers of Dagens Nyheter.
+Dagens Nyheter AB is in not affiliated with this project in any way or form. The project is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. These scripts require you to have a subscription to Dagens Nyheter - you cannot use it to obtain articles you don't have access to. The scripts are provided for personal use; all articles you download are copyrighted to Dagens Nyheter AB and may not be distributed to anyone without their permission. The scripts are for personal use only for already paying customers of Dagens Nyheter.
