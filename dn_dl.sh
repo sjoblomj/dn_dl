@@ -139,7 +139,7 @@ download_article_list() {
   [ "$download" = "y" ] || [ ! -f "article_list" ] ; fetch_articles=$?
   while [ "$fetch_articles" -eq 0 ]; do
     echo "Downloading $offset articles"
-    curl -s --header "${cookie}" "${dn_adress}?offset=${offset}" | awk 'BEGIN{in_list = 0; url = ""; found_articles = 0;}{if ($0 ~ "<div class=\"timeline-page__listing\">") { url = ""; in_list = 1; } if ($0 ~ "<div class=\"pagination") in_list = 0; if ($0 ~ "<a href" && in_list) { sub(/ *<a href="/, "", $0); sub(/" .*/, "", $0); sub(/\/$/, "", $0); url = "https://www.dn.se" $0; } if ($0 ~ "<time " && in_list) { sub(/.*="/, "", $0); sub(/T.*/, "", $0); print $0 " " url >> "article_list"; found_articles = 1;}} END{if (!found_articles) exit 1;}'
+    curl -s --header "${cookie}" "${dn_address}?offset=${offset}" | awk 'BEGIN{in_list = 0; url = ""; found_articles = 0;}{if ($0 ~ "<div class=\"timeline-page__listing\">") { url = ""; in_list = 1; } if ($0 ~ "<div class=\"pagination") in_list = 0; if ($0 ~ "<a href" && in_list) { sub(/ *<a href="/, "", $0); sub(/" .*/, "", $0); sub(/\/$/, "", $0); url = "https://www.dn.se" $0; } if ($0 ~ "<time " && in_list) { sub(/.*="/, "", $0); sub(/T.*/, "", $0); print $0 " " url >> "article_list"; found_articles = 1;}} END{if (!found_articles) exit 1;}'
     RESULT=$?
     if [ $RESULT -ne 0 ]; then
       break
@@ -153,34 +153,34 @@ find_image_size() {
   date="${dirname%%_*}" # Remove everything after '_'
   prevdir=$(pwd)
   tmpdir=$(mktemp --directory)
-  cat ../../latex_defs.tex | sed 's/#TITLE#/'"${page_title}"'/g' | sed 's/#YEAR#/'"$date"'/g' | sed 's/tableofcontents/tableofcontents\n\\newpage/g' > article.tex
-  cp * "$tmpdir"
+  sed 's/#TITLE#/'"${page_title}"'/g; s/#YEAR#/'"$date"'/g; s/tableofcontents/tableofcontents\n\\newpage/g' ../../latex_defs.tex > article.tex
+  cp ./* "$tmpdir"
   rm article.tex
-  cd "$tmpdir"
+  cd "$tmpdir" || return
 
   mkdir "$dirname"
-  while read img; do
-    imgname=$(echo "${img}" | sed 's|[/:]|_|g')
+  while read -r img; do
+    imgname=${img//[\/:]/_}
     mv "$imgname" "$dirname"
   done < imgs
 
   xelatex article.tex 1> /dev/null
   pages_big=$(pdfinfo article.pdf | awk '/^Pages:/ {print $2}')
-  sed -i 's/includegraphics\[width=0.95/includegraphics\[width=0.85/g' $dirname.tex
+  sed -i 's/includegraphics\[width=0.95/includegraphics\[width=0.85/g' "$dirname".tex
   xelatex article.tex 1> /dev/null
   pages_small=$(pdfinfo article.pdf | awk '/^Pages:/ {print $2}')
-  cd "$prevdir"
-  rm -r $tmpdir
+  cd "$prevdir" || return
+  rm -r "$tmpdir"
 
-  if (( $pages_big > $pages_small )); then
-    sed -i 's/includegraphics\[width=0.95/includegraphics\[width=0.85/g' $dirname.tex
+  if (( pages_big > pages_small )); then
+    sed -i 's/includegraphics\[width=0.95/includegraphics\[width=0.85/g' "$dirname".tex
   fi
  }
 
 create_latex() {
   dirname="${1}"
   previous_dir=$(pwd)
-  cd "${dirname}"
+  cd "${dirname}" || exit
 
   # cmark-gfm doesn't do a good job with Latex images; do a hacky manual override
   sed -i -E "s/\!\[(.*)\]/@£\1¤/g" article.md
@@ -194,12 +194,12 @@ create_latex() {
   sed -i -E "s/@£(.*)¤\(([^ ]*) ?(.*)\)/\\\\begin\{figure\}\[ht\!\]\n\\\\centering\n\\\\includegraphics\[width=0.95\\\\textwidth\]\{${dirname}\/\2\}\n\\\\caption\{\3 \1\}\n\\\\end\{figure\}/g" "${dirname}.tex"
   sed -i -E "s/\\\\begin\{tabular\}\{l\}/\\\\centering\\\\begin\{tabular\}\{\|p\{0.8\\\\linewidth\}\|\}\\\\hline\\\\\\\\/g" "${dirname}.tex"
   sed -i -E "s/\\\\end\{tabular\}/\\\\hline\n\\\\end\{tabular\}/g" "${dirname}.tex"
-  cat "${dirname}.tex" | awk 'BEGIN{in_head = 0;}{if ($0 ~ "\\\\section") { in_head = 1; print $0; } else if ($0 ~ "\\\\rule") { in_head = 0; print $0; } else if (in_head && $0 ~ "Av: ") print "\\begin{center}\\small{" $0 "\\\\"; else if (in_head && $0 ~ "Publicerad: ") print $0 "}\\end{center}"; else print $0;}' > tmp.tex && mv tmp.tex "${dirname}.tex"
+  awk 'BEGIN{in_head = 0;}{if ($0 ~ "\\\\section") { in_head = 1; print $0; } else if ($0 ~ "\\\\rule") { in_head = 0; print $0; } else if (in_head && $0 ~ "Av: ") print "\\begin{center}\\small{" $0 "\\\\"; else if (in_head && $0 ~ "Publicerad: ") print $0 "}\\end{center}"; else print $0;}' "${dirname}.tex" > tmp.tex && mv tmp.tex "${dirname}.tex"
 
   if [ "$use_smaller_images_if_better" = "y" ]; then
     find_image_size "${dirname}"
   fi
-  cd "${previous_dir}"
+  cd "${previous_dir}" || exit
 }
 
 download_article_and_imgs() {
@@ -207,7 +207,7 @@ download_article_and_imgs() {
   url="${2}"
   previous_dir=$(pwd)
   mkdir -p "${dirname}"
-  cd "${dirname}"
+  cd "${dirname}" || exit
 
   [ "$download" = "y" ] || [ ! -f "article.html" ] ; fetch_article=$?
   if [ "$fetch_article" -eq 0 ]; then
@@ -219,8 +219,8 @@ download_article_and_imgs() {
     echo "No images found!"
     echo
   else
-    while read img; do
-      imgname=$(echo "${img}" | sed 's|[/:]|_|g')
+    while read -r img; do
+      imgname=${img//[\/:]/_}
       [ "$download" = "y" ] || [ ! -f "$imgname" ] ; fetch_img=$?
       if [ "$fetch_img" -eq 0 ]; then
         curl -s -L --retry 5 "${img}" -o "${imgname}"
@@ -230,15 +230,15 @@ download_article_and_imgs() {
       fi
     done < imgs
   fi
-  cd "$previous_dir"
+  cd "$previous_dir" || exit
 }
 
 download_and_process_articles() {
   mkdir -p "${output_dir}"
   prevdir=$(pwd)
-  cd "${output_dir}"
+  cd "${output_dir}" || exit
 
-  while read date url; do
+  while read -r date url; do
     name="${url##*/}"
     dirname="${date}_${name}"
     echo "${date} - ${name}"
@@ -249,20 +249,20 @@ download_and_process_articles() {
     fi
   done < ../article_list
 
-  cd "$prevdir"
+  cd "$prevdir" || exit
 }
 
 create_output_groups_by_year() {
-  cd "${output_dir}"
-  for y in $(seq $first_year $(date +%Y)); do
-    if ls $y-* 1> /dev/null 2>&1; then
+  cd "${output_dir}" || exit
+  for y in $(seq $first_year "$(date +%Y)"); do
+    if ls "$y"-* 1> /dev/null 2>&1; then
 
       if [ "${format}" == "pdf" ]; then
-        ls -1 $y-*/*.tex | sed 's/^/\\include{/' | sed 's/$/}/' > $y.tex
-        cat ../latex_defs.tex | sed 's/#TITLE#/'"${page_title}"'/g' | sed 's/#YEAR#/'"$y"'/g' > articles_$y.tex
+        find . -type f -path "./$y-*/*.tex" | sort | sed 's/^/\\include{/; s/$/}/' > "$y".tex
+        sed 's/#TITLE#/'"${page_title}"'/g; s/#YEAR#/'"$y"'/g' ../latex_defs.tex > articles_"$y".tex
 
         for i in $(seq 1 2); do
-          xelatex articles_$y.tex
+          xelatex articles_"$y".tex
         done
       fi
     fi
@@ -276,8 +276,8 @@ download_and_process_articles
 
 if [ "$divide_by_year" = "y" ]; then
   echo
-  cd "${dir}"
+  cd "${dir}" || exit
   create_output_groups_by_year
 fi
 
-cd "${dir}"
+cd "${dir}" || return
