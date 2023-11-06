@@ -183,12 +183,12 @@ create_latex() {
   cd "${dirname}" || exit
 
   # cmark-gfm doesn't do a good job with Latex images; do a hacky manual override
-  sed -i -E "s/\!\[(.*)\]/@£\1¤/g" article.md
+  sed -i -E "s/\!\[(.*)\]/@£\1¤/g" "${dirname}".md
 
-  cmark-gfm -e table --table-prefer-style-attributes --to latex article.md > "${dirname}.tex"
+  cmark-gfm -e table --table-prefer-style-attributes --to latex "${dirname}".md > "${dirname}.tex"
 
   # Reset image hack
-  sed -i -E "s/@£(.*)¤/![\1]/g" article.md
+  sed -i -E "s/@£(.*)¤/![\1]/g" "${dirname}".md
 
   # Recreate proper images and tables
   sed -i -E "s/@£(.*)¤\(([^ ]*) ?(.*)\)/\\\\begin\{figure\}\[ht\!\]\n\\\\centering\n\\\\includegraphics\[width=0.95\\\\textwidth\]\{${dirname}\/\2\}\n\\\\caption\{\3 \1\}\n\\\\end\{figure\}/g" "${dirname}.tex"
@@ -209,11 +209,11 @@ download_article_and_imgs() {
   mkdir -p "${dirname}"
   cd "${dirname}" || exit
 
-  [ "$download" = "y" ] || [ ! -f "article.html" ] ; fetch_article=$?
+  [ "$download" = "y" ] || [ ! -f "${dirname}.html" ] ; fetch_article=$?
   if [ "$fetch_article" -eq 0 ]; then
-    curl -L -s --header "${cookie}" "${url}" > article.html
+    curl -L -s --header "${cookie}" "${url}" > "${dirname}.html"
   fi
-  ../../parser.awk article.html > article.md
+  ../../parser.awk "${dirname}.html" > "${dirname}.md"
 
   if [ ! -f imgs ]; then
     echo "No images found!"
@@ -245,7 +245,7 @@ download_and_process_articles() {
 
     download_article_and_imgs "${dirname}" "${url}"
     if [ "${format}" == "pdf" ]; then
-      create_latex "${dirname}" "$url"
+      create_latex "${dirname}"
     fi
   done < ../article_list
 
