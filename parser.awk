@@ -81,7 +81,7 @@ BEGIN {
 
             delim = "\n";
             if (Factbox == "") {
-                Factbox = "| " Fb_title " |\n| ";
+                Factbox = "\n| " Fb_title " |\n| ";
                 for (c = length(Fb_title); c > 0; c--)
                     Factbox = Factbox "-";
                 Factbox = Factbox " |";
@@ -228,7 +228,7 @@ BEGIN {
             body = "";
             if (Debug) print "Is reading Img: '" Img "'" > "/dev/stderr"
         }
-        if ((body ~ "<div class=\"picture" || body ~ "<div class=\"ds-full-width-element\">" || body ~ "</div>") && Is_reading_img) {
+        if ((body ~ "<div class=\"picture" || body ~ "<div class=\"ds-full-width-element" || body ~ "</div>") && Is_reading_img) {
             if (Debug) print "Is reading img, skipping line" > "/dev/stderr"
             body = "";
         }
@@ -338,6 +338,7 @@ function html_to_commonmark(text) {
     gsub(/ ?<strong> ?/, " **", text);
     gsub(/<\/strong>/, "**", text);
     gsub(/\n +/, "\n", text);
+    gsub(/&nbsp;/, " ", text);
     return text;
 }
 
