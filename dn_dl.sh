@@ -10,12 +10,13 @@ preserve_img_quality="n"
 divide_by_year="n"
 format="pdf"
 output_dir=""
+mark2epub_dir=""
 
 print_help() {
-    echo "dn_dl 2.0 by Johan Sjöblom"
+    echo "dn_dl 3.0 by Johan Sjöblom"
     echo "Parses and downloads articles from the Swedish"
-    echo "newspaper Dagens Nyheter. Can output into Markdown or"
-    echo "PDFs."
+    echo "newspaper Dagens Nyheter. Can output into Markdown,"
+    echo "PDF or EPUB."
     echo ""
     echo "Parameters:"
     echo "  --url \"URL\""
@@ -34,7 +35,7 @@ print_help() {
     echo "    somewhat in the PDF, if that results in fewer"
     echo "    pages. If not, the original size is kept. This"
     echo "    option will run multiple passes of creating"
-    echo "    PDFs. Only relevant for --output \"pdf\""
+    echo "    PDFs. Only relevant for --format \"pdf\""
     echo ""
     echo "  --preserve-image-quality"
     echo "    Optional param. Keep the original image quality."
@@ -46,14 +47,23 @@ print_help() {
     echo "    Optional param. Collects articles into separate"
     echo "    files by year."
     echo ""
-    echo "  --format \"[pdf|markdown]\""
+    echo "  --format \"[pdf|epub|markdown]\""
     echo "    Mandatory param. Which format to output to."
+    echo ""
+    echo "  --mark2epub-dir \"DIRECTORY\""
+    echo "    Mandatory param if --format \"epub\" is given;"
+    echo "    if not, this param will do nothing."
+    echo "    The directory where mark2epub can be found,"
+    echo "    which will create the epub file. This utility"
+    echo "    can be downloaded from"
+    echo "    https://github.com/AlexPof/mark2epub"
     echo ""
     echo "  --output-dir \"DIRECTORY\""
     echo "    Mandatory param. Directory to save output into."
 }
 
 print_error_and_quit() {
+    echo ""
     echo "${1}"
     echo ""
     print_help
@@ -88,6 +98,14 @@ for (( i=0; i<$#; i++ )); do
         fi
         ignore_arg=1
         ;;
+    --mark2epub-dir)
+        mark2epub_dir="${argv[i+1]}"
+        if [ ! -d "$mark2epub_dir" ]; then
+            echo "Directory given for mark2epub does not exist: '$mark2epub_dir'"
+            exit 1
+        fi
+        ignore_arg=1
+        ;;
     --invalidate-cache)
         download="y"
         ;;
@@ -106,7 +124,7 @@ for (( i=0; i<$#; i++ )); do
         ;;
     --format)
         f="${argv[i+1]}"
-        if [ "$f" == "pdf" ] || [ "$f" == "markdown" ]; then
+        if [ "$f" == "pdf" ] || [ "$f" == "epub" ] || [ "$f" == "markdown" ]; then
             format="$f"
         else
             print_error_and_quit "Unknown value given to format parameter: '$f'"
@@ -131,6 +149,8 @@ elif [ "${output_dir}" == "" ]; then
     print_error_and_quit "Missing required parameter 'output-dir'"
 elif [ "${cookie}" == "" ]; then
     print_error_and_quit "Missing required parameter 'cookie'"
+elif [ "${mark2epub_dir}" == "" ] && [ "${format}" == "epub" ]; then
+    print_error_and_quit "Missing required parameter 'mark2epub-dir'"
 fi
 
 
@@ -202,6 +222,84 @@ create_latex() {
   cd "${previous_dir}" || exit
 }
 
+create_title_page_picture() {
+  timestamp="${1}"
+  target="${2}"
+  dn_dl_root="${3}"
+
+  prevworkdir=$(pwd)
+  tmpdir=$(mktemp --directory)
+  cp "$dn_dl_root"/latex_defs.tex "$tmpdir"
+  cd "$tmpdir" || exit
+
+  sed -E "\
+    s/#TITLE#/${page_title}/g ; \
+    s/#YEAR#/$timestamp/g ; \
+    s/\\newpage//g ; \
+    s/\\tableofcontents//g ; \
+    s/\\input\{.*.tex\}//g \
+    " latex_defs.tex > cover.tex
+
+  xelatex cover.tex 1> /dev/null
+  pdftocairo -png cover.pdf
+  cp cover-1.png "$prevworkdir"/"$target"/cover-"$timestamp".png
+
+  rm -rf "$tmpdir"
+  cd "$prevworkdir" || exit
+}
+
+make_epub() {
+  workdir="${1}"
+  date="${2}"
+  chapters="${3}"
+  epub_fn="${4}"
+
+  currdir=$(pwd)
+
+  cp "$dn_dl_root"/epub_style.css "$workdir"/css
+  cp "$dn_dl_root"/epub_desc.json "$workdir"/description.json
+  create_title_page_picture "$date" "$workdir/images" "$dn_dl_root"
+
+  sed -i -E "\
+    s/\"dc:title\":\".*\",/\"dc:title\":\"${page_title} - $date\",/ ; \
+    s/\"dc:date\":\".*\",/\"dc:date\":\"$(date -I)\",/ ; \
+    s/\"dc:identifier\":\".*\",/\"dc:identifier\":\"$(uuidgen)\",/ ; \
+    s/\"cover_image\":\".*\",/\"cover_image\":\"cover-$date.png\",/ ; \
+    s/\"chapters\":\[/\"chapters\":\[\n$chapters/ \
+    " "$workdir"/description.json
+
+  cd "$mark2epub_dir" || exit
+
+  python mark2epub.py "$currdir/$workdir" "$currdir/$workdir/$epub_fn" 1> /dev/null
+  cd "$currdir" || return
+}
+
+create_epub() {
+  dirname="${1}"
+  time="${2}"
+  prevdir=$(pwd)
+  cd "$dirname" || exit
+
+  dir="."
+  epub_filename="$dirname.epub"
+  chapters=""
+
+  mkdir -p "$dir"/images "$dir"/css
+  for f in "$dir"/*.md; do
+    f="${f##*/}"
+    nf="${f%.*}"_epub.md
+    cp "$f" "$nf"
+
+    sed -i -E "s/\!\[(.*)\]\((.*)\)/\![\1\]\(images\/\2\)/g" "$nf"
+    chapters="${chapters}    {\"markdown\":\"$nf\",\"css\":\"\"}"
+  done
+  find . -maxdepth 1 -type f -regex ".*\.\(jpeg\|jpg\|gif\|png\)" -exec cp {} "$dir"/images \;
+
+  make_epub "$dir" "$time" "$chapters" "$epub_filename"
+
+  cd "$prevdir" || exit
+}
+
 download_article_and_imgs() {
   dirname="${1}"
   url="${2}"
@@ -246,6 +344,8 @@ download_and_process_articles() {
     download_article_and_imgs "${dirname}" "${url}"
     if [ "${format}" == "pdf" ]; then
       create_latex "${dirname}"
+    elif [ "${format}" == "epub" ]; then
+      create_epub "${dirname}" "${date}"
     fi
   done < ../article_list
 
@@ -254,30 +354,43 @@ download_and_process_articles() {
 
 create_output_groups_by_year() {
   cd "${output_dir}" || exit
-  for y in $(seq $first_year "$(date +%Y)"); do
-    if ls "$y"-* 1> /dev/null 2>&1; then
+  for year in $(seq $first_year "$(date +%Y)"); do
+    if ls "$year"-* 1> /dev/null 2>&1; then
 
       if [ "${format}" == "pdf" ]; then
-        find . -type f -path "./$y-*/*.tex" | sort | sed 's/^/\\include{/; s/$/}/' > "$y".tex
-        sed 's/#TITLE#/'"${page_title}"'/g; s/#YEAR#/'"$y"'/g' ../latex_defs.tex > articles_"$y".tex
+        find . -type f -path "./$year-*/*.tex" | sort | sed 's/^/\\include{/; s/$/}/' > "$year".tex
+        sed 's/#TITLE#/'"${page_title}"'/g; s/#YEAR#/'"$year"'/g' ../latex_defs.tex > articles_"$year".tex
 
         for i in $(seq 1 2); do
-          xelatex articles_"$y".tex
+          xelatex articles_"$year".tex
         done
+
+      elif [ "${format}" == "epub" ]; then
+        dir="epub-$year"
+        epub_filename="$year.epub"
+
+        mkdir -p "$dir"/images "$dir"/css
+        cp "$year"-*/*_epub.md "$dir"
+        chapters=$(find . -type f -path "./$dir/*.md" -printf "%f\n" | sort | sed 's/^/    {\"markdown\":\"/ ; s/$/\",\"css\":\"\"},/' | tr -d '\n')
+        chapters=${chapters:0:-1}
+        find "$year"-* -maxdepth 1 -type f -regex ".*\.\(jpeg\|jpg\|gif\|png\)" -exec cp {} "$dir"/images \;
+
+        make_epub "$dir" "$year" "$chapters" "$epub_filename"
       fi
     fi
   done
 }
 
-dir=$(pwd)
+echo
+dn_dl_root=$(pwd)
 
 download_article_list
 download_and_process_articles
 
 if [ "$divide_by_year" = "y" ]; then
   echo
-  cd "${dir}" || exit
+  cd "${dn_dl_root}" || exit
   create_output_groups_by_year
 fi
 
-cd "${dir}" || return
+cd "${dn_dl_root}" || return

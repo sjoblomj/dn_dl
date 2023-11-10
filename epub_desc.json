@@ -1,0 +1,20 @@
+{
+  "metadata":{
+    "dc:title":"Mark2Epub Sample",
+    "dc:creator":"Mark2Epub",
+    "dc:language":"sv-SE",
+    "dc:identifier":"mark2epub-sample",
+    "dc:source":"",
+    "meta":"",
+    "dc:date":"",
+    "dc:publisher":"Dagens Nyheter",
+    "dc:contributor":"",
+    "dc:rights":"",
+    "dc:description":"",
+    "dc:subject":""
+  },
+  "cover_image":"cover.png",
+  "default_css":["epub_style.css"],
+  "chapters":[
+  ]
+}

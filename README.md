@@ -1,11 +1,11 @@
 # dn_dl
 ![dn_dl](dn_dl.png)
 
-Parser for taking articles from the Swedish newspaper Dagens Nyheter, and turning them into Markdown or PDFs for easy and convenient reading offline.
+Parser for taking articles from the Swedish newspaper Dagens Nyheter, and turning them into Markdown, PDFs or EPUBs for easy and convenient reading offline.
 
 Given a URL to an author on dn.se, all their articles will be downloaded. The downloaded HTML will be parsed into [Markdown](https://en.wikipedia.org/wiki/Markdown), and all images associated with the article will be downloaded and optionally shrunk down.
 
-The Markdown can be turned into PDFs using Latex. Finally, the script can loop over all years, assembling all articles from a given year into a PDF.
+The Markdown can be turned into PDFs using Latex, or to EPUBs using [mark2epub](https://github.com/AlexPof/mark2epub). Finally, the script can loop over all years, assembling all articles from a given year into a PDF or EPUB.
 
 
 ## Cookie
@@ -29,6 +29,7 @@ The following tools are needed to run the script:
 * curl
 * ImageMagick if shrinking images (default behaviour)
 * [cmark-gfm](https://github.com/github/cmark-gfm) if creating PDFs
+* [mark2epub](https://github.com/AlexPof/mark2epub) if creating EPUBs
 * xelatex if creating PDFs
 
 
