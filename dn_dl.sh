@@ -13,7 +13,7 @@ output_dir=""
 mark2epub_dir=""
 
 print_help() {
-    echo "dn_dl 3.0 by Johan Sjöblom"
+    echo "dn_dl 3.1 by Johan Sjöblom"
     echo "Parses and downloads articles from the Swedish"
     echo "newspaper Dagens Nyheter. Can output into Markdown,"
     echo "PDF or EPUB."
@@ -251,21 +251,26 @@ create_title_page_picture() {
 make_epub() {
   workdir="${1}"
   date="${2}"
-  chapters="${3}"
+  chapter_list="${3}"
   epub_fn="${4}"
 
   currdir=$(pwd)
 
-  cp "$dn_dl_root"/epub_style.css "$workdir"/css
   cp "$dn_dl_root"/epub_desc.json "$workdir"/description.json
+  if [ -s "$dn_dl_root"/epub_style.css ]; then
+    mkdir -p "$workdir"/css
+    cp "$dn_dl_root"/epub_style.css "$workdir"/css
+  else
+    sed -i -E "s|\"default_css\":.*|\"default_css\":\[\],|" "$workdir"/description.json
+  fi
   create_title_page_picture "$date" "$workdir/images" "$dn_dl_root"
 
   sed -i -E "\
-    s/\"dc:title\":\".*\",/\"dc:title\":\"${page_title} - $date\",/ ; \
-    s/\"dc:date\":\".*\",/\"dc:date\":\"$(date -I)\",/ ; \
-    s/\"dc:identifier\":\".*\",/\"dc:identifier\":\"$(uuidgen)\",/ ; \
-    s/\"cover_image\":\".*\",/\"cover_image\":\"cover-$date.png\",/ ; \
-    s/\"chapters\":\[/\"chapters\":\[\n$chapters/ \
+    s|\"dc:title\":\".*\",|\"dc:title\":\"${page_title} - $date\",| ; \
+    s|\"dc:date\":\".*\",|\"dc:date\":\"$(date -I)\",| ; \
+    s|\"dc:identifier\":\".*\",|\"dc:identifier\":\"$(uuidgen)\",| ; \
+    s|\"cover_image\":\".*\",|\"cover_image\":\"cover-$date.png\",| ; \
+    s|\"chapters\":\[|\"chapters\":\[\n$chapter_list| \
     " "$workdir"/description.json
 
   cd "$mark2epub_dir" || exit
@@ -284,16 +289,9 @@ create_epub() {
   epub_filename="$dirname.epub"
   chapters=""
 
-  mkdir -p "$dir"/images "$dir"/css
   for f in "$dir"/*.md; do
-    f="${f##*/}"
-    nf="${f%.*}"_epub.md
-    cp "$f" "$nf"
-
-    sed -i -E "s/\!\[(.*)\]\((.*)\)/\![\1\]\(images\/\2\)/g" "$nf"
-    chapters="${chapters}    {\"markdown\":\"$nf\",\"css\":\"\"}"
+    chapters="${chapters}    {\"markdown\":\"$f\",\"css\":\"\"}"
   done
-  find . -maxdepth 1 -type f -regex ".*\.\(jpeg\|jpg\|gif\|png\)" -exec cp {} "$dir"/images \;
 
   make_epub "$dir" "$time" "$chapters" "$epub_filename"
 
@@ -317,8 +315,12 @@ download_article_and_imgs() {
     echo "No images found!"
     echo
   else
+    mkdir -p images
     while read -r img; do
-      imgname=${img//[\/:]/_}
+      origimg="${img//[\/:]/_}"
+      imgname="images/${img//[\/:]/_}"
+      sed -i -E "s|${origimg}|${imgname}|g" "${dirname}.md"
+
       [ "$download" = "y" ] || [ ! -f "$imgname" ] ; fetch_img=$?
       if [ "$fetch_img" -eq 0 ]; then
         curl -s -L --retry 5 "${img}" -o "${imgname}"
@@ -369,11 +371,11 @@ create_output_groups_by_year() {
         dir="epub-$year"
         epub_filename="$year.epub"
 
-        mkdir -p "$dir"/images "$dir"/css
-        cp "$year"-*/*_epub.md "$dir"
+        mkdir -p "$dir"/images
+        cp "$year"-*/*.md "$dir"
         chapters=$(find . -type f -path "./$dir/*.md" -printf "%f\n" | sort | sed 's/^/    {\"markdown\":\"/ ; s/$/\",\"css\":\"\"},/' | tr -d '\n')
         chapters=${chapters:0:-1}
-        find "$year"-* -maxdepth 1 -type f -regex ".*\.\(jpeg\|jpg\|gif\|png\)" -exec cp {} "$dir"/images \;
+        find "$year"-* -maxdepth 2 -type f -regex ".*\.\(jpeg\|jpg\|gif\|png\)" -exec cp {} "$dir"/images \;
 
         make_epub "$dir" "$year" "$chapters" "$epub_filename"
       fi
