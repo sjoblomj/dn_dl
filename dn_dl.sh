@@ -171,39 +171,37 @@ download_article_list() {
   done
 }
 
-find_image_size() {
+create_latex_for_article() {
   local dirname="${1}"
   local date="${dirname%%_*}" # Remove everything after '_'
-  local imgname=""
+  local pdf="article"
   local pages_big=0
   local pages_small=0
-  local prevdir=""
-  local tmpdir=""
+  local big=95
+  local small=85
 
-  prevdir=$(pwd)
-  tmpdir=$(mktemp --directory)
-  sed 's/#TITLE#/'"${page_title}"'/g; s/#YEAR#/'"$date"'/g; s/tableofcontents/tableofcontents\n\\newpage/g' ../../latex_defs.tex > article.tex
-  cp ./* "$tmpdir"
-  rm article.tex
-  cd "$tmpdir" || return
-
-  mkdir "$dirname"
-  while read -r img; do
-    imgname=${img//[\/:]/_}
-    mv "$imgname" "$dirname"
-  done < imgs
+  sed 's|#TITLE#|'"${page_title}"'|g; s|#YEAR#|'"$date"'|g; s|#FILE#|'"$dirname"'|g; s|\\tableofcontents||g' ../../latex_defs.tex > article.tex
 
   xelatex article.tex 1> /dev/null
-  pages_big=$(pdfinfo article.pdf | awk '/^Pages:/ {print $2}')
-  sed -i 's/includegraphics\[width=0.95/includegraphics\[width=0.85/g' "$dirname".tex
-  xelatex article.tex 1> /dev/null
-  pages_small=$(pdfinfo article.pdf | awk '/^Pages:/ {print $2}')
-  cd "$prevdir" || return
-  rm -r "$tmpdir"
+  if [ "$use_smaller_images_if_better" = "y" ]; then
+    pages_big=$(pdfinfo article.pdf | awk '/^Pages:/ {print $2}')
+    mv article.pdf big.pdf
 
-  if (( pages_big > pages_small )); then
-    sed -i 's/includegraphics\[width=0.95/includegraphics\[width=0.85/g' "$dirname".tex
+    sed -i -E "s|includegraphics\[width=0.[0-9]+|includegraphics\[width=0.$small|g" "$dirname".tex
+    xelatex article.tex 1> /dev/null
+    pages_small=$(pdfinfo article.pdf | awk '/^Pages:/ {print $2}')
+    mv article.pdf small.pdf
+
+    if (( pages_big > pages_small )); then
+      sed -i -E "s|includegraphics\[width=0.[0-9]+|includegraphics\[width=0.$small|g" "$dirname".tex
+      pdf="small"
+    else
+      sed -i -E "s|includegraphics\[width=0.[0-9]+|includegraphics\[width=0.$big|g" "$dirname".tex
+      pdf="big"
+    fi
   fi
+  mv "$pdf.pdf" "$dirname.pdf"
+  rm -f small.pdf big.pdf article.{aux,log,out,toc}
  }
 
 create_latex() {
@@ -222,13 +220,13 @@ create_latex() {
   sed -i -E "s/@£(.*)¤/![\1]/g" "${dirname}".md
 
   # Recreate proper images and tables
-  sed -i -E "s/@£(.*)¤\(([^ ]*) ?(.*)\)/\\\\begin\{figure\}\[ht\!\]\n\\\\centering\n\\\\includegraphics\[width=0.95\\\\textwidth\]\{${dirname}\/\2\}\n\\\\caption\{\3 \1\}\n\\\\end\{figure\}/g" "${dirname}.tex"
+  sed -i -E "s/@£(.*)¤\(([^ ]*) ?(.*)\)/\\\\begin\{figure\}\[ht\!\]\n\\\\centering\n\\\\includegraphics\[width=0.95\\\\textwidth\]\{\2\}\n\\\\caption\{\3 \1\}\n\\\\end\{figure\}/g" "${dirname}.tex"
   sed -i -E "s/\\\\begin\{tabular\}\{l\}/\\\\centering\\\\begin\{tabular\}\{\|p\{0.8\\\\linewidth\}\|\}\\\\hline\\\\\\\\/g" "${dirname}.tex"
   sed -i -E "s/\\\\end\{tabular\}/\\\\hline\n\\\\end\{tabular\}/g" "${dirname}.tex"
   awk 'BEGIN{in_head = 0;}{if ($0 ~ "\\\\section") { in_head = 1; print $0; } else if ($0 ~ "\\\\rule") { in_head = 0; print $0; } else if (in_head && $0 ~ "Av: ") print "\\begin{center}\\small{" $0 "\\\\"; else if (in_head && $0 ~ "Publicerad: ") print $0 "}\\end{center}"; else print $0;}' "${dirname}.tex" > tmp.tex && mv tmp.tex "${dirname}.tex"
 
-  if [ "$use_smaller_images_if_better" = "y" ]; then
-    find_image_size "${dirname}"
+  if [ "$use_smaller_images_if_better" = "y" ] || [ "$divide_by_year" = "n" ]; then
+    create_latex_for_article "${dirname}"
   fi
   cd "${prevdir}" || exit 1
 }
@@ -248,6 +246,7 @@ create_title_page_picture() {
   sed -E "\
     s/#TITLE#/${page_title}/g ; \
     s/#YEAR#/$date/g ; \
+    s/#FILE#/$date/g ; \
     s/\\newpage//g ; \
     s/\\tableofcontents//g ; \
     s/\\input\{.*.tex\}//g \
@@ -379,20 +378,26 @@ download_and_process_articles() {
 }
 
 create_output_groups_by_year() {
+  local chapters=""
+
   cd "${output_dir}" || exit 1
   for year in $(seq $first_year "$(date +%Y)"); do
     if ls "$year"-* 1> /dev/null 2>&1; then
 
       if [ "${format}" == "pdf" ]; then
-        find . -type f -path "./$year-*/*.tex" | sort | sed 's/^/\\include{/; s/$/}/' > "$year".tex
-        sed 's/#TITLE#/'"${page_title}"'/g; s/#YEAR#/'"$year"'/g' ../latex_defs.tex > articles_"$year".tex
+        chapters=$(find . -type f -path "./$year-*/*.tex" ! -name "article.tex" | sort)
+        echo "\graphicspath{%" > "$year.tex"
+        echo "$chapters" | sed -E 's|^./(.*)/.*|{./\1}%|' >> "$year".tex
+        echo "}" >> "$year.tex"
+        echo "$chapters" | sed 's/^/\\include{/; s/$/}/' >> "$year".tex
+        sed 's/#TITLE#/'"${page_title}"'/g; s/#YEAR#/'"$year"'/g; s/#FILE#/'"$year"'/g' ../latex_defs.tex > articles_"$year".tex
 
         for i in $(seq 1 2); do
           xelatex articles_"$year".tex
         done
+        rm -f articles_"$year".{aux,log,out,toc}
 
       elif [ "${format}" == "epub" ]; then
-        local chapters=""
         local dir="epub-$year"
         local epub_filename="$year.epub"
 
