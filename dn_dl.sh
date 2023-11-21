@@ -13,7 +13,7 @@ output_dir=""
 mark2epub_dir=""
 
 print_help() {
-    echo "dn_dl 3.1 by Johan Sjöblom"
+    echo "dn_dl 3.2 by Johan Sjöblom"
     echo "Parses and downloads articles from the Swedish"
     echo "newspaper Dagens Nyheter. Can output into Markdown,"
     echo "PDF or EPUB."
@@ -141,27 +141,30 @@ for (( i=0; i<$#; i++ )); do
     esac
 done
 
-if [ "${dn_address}" == "" ]; then
+if [ -z "${dn_address}" ]; then
     print_error_and_quit "Missing required parameter 'url'"
-elif [ "${page_title}" == "" ]; then
+elif [ -z "${page_title}" ]; then
     print_error_and_quit "Missing required parameter 'page-title'"
-elif [ "${output_dir}" == "" ]; then
+elif [ -z "${output_dir}" ]; then
     print_error_and_quit "Missing required parameter 'output-dir'"
-elif [ "${cookie}" == "" ]; then
+elif [ -z "${cookie}" ]; then
     print_error_and_quit "Missing required parameter 'cookie'"
-elif [ "${mark2epub_dir}" == "" ] && [ "${format}" == "epub" ]; then
+elif [ -z "${mark2epub_dir}" ] && [ "${format}" == "epub" ]; then
     print_error_and_quit "Missing required parameter 'mark2epub-dir'"
 fi
 
 
 download_article_list() {
-  offset=0
+  local offset=0
+  local fetch_articles=""
+  local result=0
+
   [ "$download" = "y" ] || [ ! -f "article_list" ] ; fetch_articles=$?
   while [ "$fetch_articles" -eq 0 ]; do
     echo "Downloading $offset articles"
     curl -s --header "${cookie}" "${dn_address}?offset=${offset}" | awk 'BEGIN{in_list = 0; url = ""; found_articles = 0;}{if ($0 ~ "<div class=\"timeline-page__listing\">") { url = ""; in_list = 1; } if ($0 ~ "<div class=\"pagination") in_list = 0; if ($0 ~ "<a href" && in_list) { sub(/ *<a href="/, "", $0); sub(/" .*/, "", $0); sub(/\/$/, "", $0); url = "https://www.dn.se" $0; } if ($0 ~ "<time " && in_list) { sub(/.*="/, "", $0); sub(/T.*/, "", $0); print $0 " " url >> "article_list"; found_articles = 1;}} END{if (!found_articles) exit 1;}'
-    RESULT=$?
-    if [ $RESULT -ne 0 ]; then
+    result=$?
+    if [ $result -ne 0 ]; then
       break
     fi
     offset=$((offset+24))
@@ -169,8 +172,14 @@ download_article_list() {
 }
 
 find_image_size() {
-  dirname="${1}"
-  date="${dirname%%_*}" # Remove everything after '_'
+  local dirname="${1}"
+  local date="${dirname%%_*}" # Remove everything after '_'
+  local imgname=""
+  local pages_big=0
+  local pages_small=0
+  local prevdir=""
+  local tmpdir=""
+
   prevdir=$(pwd)
   tmpdir=$(mktemp --directory)
   sed 's/#TITLE#/'"${page_title}"'/g; s/#YEAR#/'"$date"'/g; s/tableofcontents/tableofcontents\n\\newpage/g' ../../latex_defs.tex > article.tex
@@ -198,9 +207,11 @@ find_image_size() {
  }
 
 create_latex() {
-  dirname="${1}"
-  previous_dir=$(pwd)
-  cd "${dirname}" || exit
+  local dirname="${1}"
+  local prevdir=""
+
+  prevdir=$(pwd)
+  cd "${dirname}" || exit 1
 
   # cmark-gfm doesn't do a good job with Latex images; do a hacky manual override
   sed -i -E "s/\!\[(.*)\]/@£\1¤/g" "${dirname}".md
@@ -219,22 +230,24 @@ create_latex() {
   if [ "$use_smaller_images_if_better" = "y" ]; then
     find_image_size "${dirname}"
   fi
-  cd "${previous_dir}" || exit
+  cd "${prevdir}" || exit 1
 }
 
 create_title_page_picture() {
-  timestamp="${1}"
-  target="${2}"
-  dn_dl_root="${3}"
+  local date="${1}"
+  local target="${2}"
+  local dn_dl_root="${3}"
+  local prevdir=""
+  local tmpdir=""
 
-  prevworkdir=$(pwd)
+  prevdir=$(pwd)
   tmpdir=$(mktemp --directory)
   cp "$dn_dl_root"/latex_defs.tex "$tmpdir"
-  cd "$tmpdir" || exit
+  cd "$tmpdir" || exit 1
 
   sed -E "\
     s/#TITLE#/${page_title}/g ; \
-    s/#YEAR#/$timestamp/g ; \
+    s/#YEAR#/$date/g ; \
     s/\\newpage//g ; \
     s/\\tableofcontents//g ; \
     s/\\input\{.*.tex\}//g \
@@ -242,19 +255,20 @@ create_title_page_picture() {
 
   xelatex cover.tex 1> /dev/null
   pdftocairo -png cover.pdf
-  cp cover-1.png "$prevworkdir"/"$target"/cover-"$timestamp".png
+  cp cover-1.png "$prevdir"/"$target"/cover-"$date".png
 
   rm -rf "$tmpdir"
-  cd "$prevworkdir" || exit
+  cd "$prevdir" || exit 1
 }
 
 make_epub() {
-  workdir="${1}"
-  date="${2}"
-  chapter_list="${3}"
-  epub_fn="${4}"
+  local workdir="${1}"
+  local date="${2}"
+  local chapters="${3}"
+  local epub_fn="${4}"
+  local prevdir=""
 
-  currdir=$(pwd)
+  prevdir=$(pwd)
 
   cp "$dn_dl_root"/epub_desc.json "$workdir"/description.json
   if [ -s "$dn_dl_root"/epub_style.css ]; then
@@ -270,40 +284,46 @@ make_epub() {
     s|\"dc:date\":\".*\",|\"dc:date\":\"$(date -I)\",| ; \
     s|\"dc:identifier\":\".*\",|\"dc:identifier\":\"$(uuidgen)\",| ; \
     s|\"cover_image\":\".*\",|\"cover_image\":\"cover-$date.png\",| ; \
-    s|\"chapters\":\[|\"chapters\":\[\n$chapter_list| \
+    s|\"chapters\":\[|\"chapters\":\[\n$chapters| \
     " "$workdir"/description.json
 
-  cd "$mark2epub_dir" || exit
+  cd "$mark2epub_dir" || exit 1
 
-  python mark2epub.py "$currdir/$workdir" "$currdir/$workdir/$epub_fn" 1> /dev/null
-  cd "$currdir" || return
+  python mark2epub.py "$prevdir/$workdir" "$prevdir/$workdir/$epub_fn" 1> /dev/null
+  cd "$prevdir" || return
 }
 
 create_epub() {
-  dirname="${1}"
-  time="${2}"
+  local dirname="${1}"
+  local date="${2}"
+  local dir="."
+  local epub_filename="$dirname.epub"
+  local chapters=""
+  local prevdir=""
+
   prevdir=$(pwd)
-  cd "$dirname" || exit
-
-  dir="."
-  epub_filename="$dirname.epub"
-  chapters=""
-
+  cd "$dirname" || exit 1
   for f in "$dir"/*.md; do
     chapters="${chapters}    {\"markdown\":\"$f\",\"css\":\"\"}"
   done
 
-  make_epub "$dir" "$time" "$chapters" "$epub_filename"
+  make_epub "$dir" "$date" "$chapters" "$epub_filename"
 
-  cd "$prevdir" || exit
+  cd "$prevdir" || exit 1
 }
 
 download_article_and_imgs() {
-  dirname="${1}"
-  url="${2}"
-  previous_dir=$(pwd)
+  local dirname="${1}"
+  local url="${2}"
+  local fetch_article=0
+  local fetch_img=0
+  local origimg=""
+  local imgname=""
+  local prevdir=""
+
+  prevdir=$(pwd)
   mkdir -p "${dirname}"
-  cd "${dirname}" || exit
+  cd "${dirname}" || exit 1
 
   [ "$download" = "y" ] || [ ! -f "${dirname}.html" ] ; fetch_article=$?
   if [ "$fetch_article" -eq 0 ]; then
@@ -330,13 +350,17 @@ download_article_and_imgs() {
       fi
     done < imgs
   fi
-  cd "$previous_dir" || exit
+  cd "$prevdir" || exit 1
 }
 
 download_and_process_articles() {
-  mkdir -p "${output_dir}"
+  local prevdir=""
+  local name=""
+  local dirname=""
+
   prevdir=$(pwd)
-  cd "${output_dir}" || exit
+  mkdir -p "${output_dir}"
+  cd "${output_dir}" || exit 1
 
   while read -r date url; do
     name="${url##*/}"
@@ -351,11 +375,11 @@ download_and_process_articles() {
     fi
   done < ../article_list
 
-  cd "$prevdir" || exit
+  cd "$prevdir" || exit 1
 }
 
 create_output_groups_by_year() {
-  cd "${output_dir}" || exit
+  cd "${output_dir}" || exit 1
   for year in $(seq $first_year "$(date +%Y)"); do
     if ls "$year"-* 1> /dev/null 2>&1; then
 
@@ -368,8 +392,9 @@ create_output_groups_by_year() {
         done
 
       elif [ "${format}" == "epub" ]; then
-        dir="epub-$year"
-        epub_filename="$year.epub"
+        local chapters=""
+        local dir="epub-$year"
+        local epub_filename="$year.epub"
 
         mkdir -p "$dir"/images
         cp "$year"-*/*.md "$dir"
@@ -391,7 +416,7 @@ download_and_process_articles
 
 if [ "$divide_by_year" = "y" ]; then
   echo
-  cd "${dn_dl_root}" || exit
+  cd "${dn_dl_root}" || exit 1
   create_output_groups_by_year
 fi
 
