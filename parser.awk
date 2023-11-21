@@ -245,6 +245,7 @@ BEGIN {
         if (body ~ "<span aria-hidden=\"true\">" && Is_reading_cap) {
             body = substr(body, index(body, ">") + 1)
             body = substr(body, 0, index(body, "<") - 1)
+            body = trim(body)
             Img  = Img " caption=\"" body "\""
             body = ""
             if (Debug) print "Is reading caption, Img: '" Img "'" > "/dev/stderr"
@@ -252,6 +253,7 @@ BEGIN {
         if (body ~ "<span class=\"ds-article-image__credits" && Is_reading_cap) {
             body = substr(body, index(body, ">") + 1)
             body = substr(body, 0, index(body, "<") - 1)
+            body = trim(body)
             Img  = Img " credits=\"" body "\""
             body = ""
             if (Debug) print "Is reading cred, Img: '" Img "'" > "/dev/stderr"
