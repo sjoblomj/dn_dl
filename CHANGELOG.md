@@ -13,6 +13,7 @@ All notable changes to this project will be documented in this file.
 
 - Now stores the list of articles in memory instead of to a temporary file.
 - Will now use deterministic id's in EPUB files rather than randomly generated ones.
+- Making text in EPUB justified.
 
 
 
