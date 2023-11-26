@@ -3,6 +3,18 @@
 All notable changes to this project will be documented in this file.
 
 
+## [3.3] - 2023-11-26
+
+### Added
+
+- Added parameters `after` and `before`. With these it is possible to specify a date-range between which to download articles.
+
+### Changed
+
+- Now stores the list of articles in memory instead of to a temporary file.
+
+
+
 ## [3.2] - 2023-11-21
 
 ### Added

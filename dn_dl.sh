@@ -1,6 +1,8 @@
 #!/bin/bash
 
 first_year=1864
+article_list=""
+
 dn_address="" # "https://www.dn.se/av/andrev-walden/"
 page_title="" # "Andrev Walden"
 cookie=""
@@ -11,6 +13,8 @@ divide_by_year="n"
 format="pdf"
 output_dir=""
 mark2epub_dir=""
+before="2099-12-31"
+after="$first_year-01-01"
 
 print_help() {
     echo "dn_dl 3.2 by Johan Sjöblom"
@@ -29,6 +33,14 @@ print_help() {
     echo "  --invalidate-cache"
     echo "    Optional param. Download articles, even if they"
     echo "    have been downloaded previously."
+    echo ""
+    echo "  --after \"DATE\""
+    echo "    Optional param. Only download articles with a"
+    echo "    date after (and including) the given date."
+    echo ""
+    echo "  --before \"DATE\""
+    echo "    Optional param. Only download articles with a"
+    echo "    date before (and including) the given date."
     echo ""
     echo "  --use-smaller-images-if-better-for-pdf"
     echo "    Optional param. Attempt to downsize images"
@@ -109,6 +121,22 @@ for (( i=0; i<$#; i++ )); do
     --invalidate-cache)
         download="y"
         ;;
+    --after)
+        after="${argv[i+1]}"
+        if [[ ! "$after" =~ ^(18[0-9]{2}|19[0-9]{2}|20[0-9]{2})-(0[1-9]|1[0-2])-(0[1-9]|[1-2][0-9]|3[0-1])$ ]]; then
+            echo "Please specify date format in ISO, i.e. YYYY-MM-DD"
+            exit 1
+        fi
+        ignore_arg=1
+        ;;
+    --before)
+        before="${argv[i+1]}"
+        if [[ ! "$before" =~ ^(18[0-9]{2}|19[0-9]{2}|20[0-9]{2})-(0[1-9]|1[0-2])-(0[1-9]|[1-2][0-9]|3[0-1])$ ]]; then
+            echo "Please specify date format in ISO, i.e. YYYY-MM-DD"
+            exit 1
+        fi
+        ignore_arg=1
+        ;;
     --use-smaller-images-if-better-for-pdf)
         use_smaller_images_if_better="y"
         ;;
@@ -156,19 +184,52 @@ fi
 
 download_article_list() {
   local offset=0
-  local fetch_articles=""
+  local fetched=""
   local result=0
 
-  [ "$download" = "y" ] || [ ! -f "article_list" ] ; fetch_articles=$?
-  while [ "$fetch_articles" -eq 0 ]; do
+  while true ; do
     echo "Downloading $offset articles"
-    curl -s --header "${cookie}" "${dn_address}?offset=${offset}" | awk 'BEGIN{in_list = 0; url = ""; found_articles = 0;}{if ($0 ~ "<div class=\"timeline-page__listing\">") { url = ""; in_list = 1; } if ($0 ~ "<div class=\"pagination") in_list = 0; if ($0 ~ "<a href" && in_list) { sub(/ *<a href="/, "", $0); sub(/" .*/, "", $0); sub(/\/$/, "", $0); url = "https://www.dn.se" $0; } if ($0 ~ "<time " && in_list) { sub(/.*="/, "", $0); sub(/T.*/, "", $0); print $0 " " url >> "article_list"; found_articles = 1;}} END{if (!found_articles) exit 1;}'
+    fetched=$(curl -s --header "${cookie}" "${dn_address}?offset=${offset}" | awk -v before="$before" -v after="$after" '
+    BEGIN {
+      in_list = 0
+      url = ""
+      found_articles = 0
+    }
+    {
+      if ($0 ~ "<div class=\"timeline-page__listing\">") {
+        url = ""
+        in_list = 1
+      }
+      if ($0 ~ "<div class=\"pagination")
+        in_list = 0
+      if ($0 ~ "<a href" && in_list) {
+        sub(/ *<a href="/, "", $0)
+        sub(/" .*/, "", $0)
+        sub(/\/$/, "", $0)
+        url = "https://www.dn.se" $0
+      }
+      if ($0 ~ "<time " && in_list) {
+        sub(/.*="/, "", $0)
+        sub(/T.*/, "", $0)
+        if ($0 >= after && $0 <= before)
+          print $0 " " url
+        found_articles = 1
+      }
+    }
+    END {
+      if (!found_articles)
+        exit 1
+    }')
     result=$?
     if [ $result -ne 0 ]; then
       break
     fi
+    if [ -n "$fetched" ]; then
+      article_list="$article_list$fetched\n"
+    fi
     offset=$((offset+24))
   done
+  article_list=${article_list:0:-2}
 }
 
 create_latex_for_article() {
@@ -372,7 +433,7 @@ download_and_process_articles() {
     elif [ "${format}" == "epub" ]; then
       create_epub "${dirname}" "${date}"
     fi
-  done < ../article_list
+  done <<< "$article_list"
 
   cd "$prevdir" || exit 1
 }
