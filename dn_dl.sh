@@ -342,7 +342,7 @@ make_epub() {
   sed -i -E "\
     s|\"dc:title\":\".*\",|\"dc:title\":\"${page_title} - $date\",| ; \
     s|\"dc:date\":\".*\",|\"dc:date\":\"$(date -I)\",| ; \
-    s|\"dc:identifier\":\".*\",|\"dc:identifier\":\"$(uuidgen)\",| ; \
+    s|\"dc:identifier\":\".*\",|\"dc:identifier\":\"$(echo "$chapters" | sha256sum | awk '{print $1}')\",| ; \
     s|\"cover_image\":\".*\",|\"cover_image\":\"cover-$date.png\",| ; \
     s|\"chapters\":\[|\"chapters\":\[\n$chapters| \
     " "$workdir"/description.json
