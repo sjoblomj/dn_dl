@@ -315,7 +315,8 @@ create_title_page_picture() {
 
   xelatex cover.tex 1> /dev/null
   pdftocairo -png cover.pdf
-  cp cover-1.png "$prevdir"/"$target"/cover-"$date".png
+  mkdir -p "$prevdir/$target"
+  cp cover-1.png "$prevdir/$target/cover-$date.png"
 
   rm -rf "$tmpdir"
   cd "$prevdir" || exit 1

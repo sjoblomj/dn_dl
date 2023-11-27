@@ -3,11 +3,12 @@
 All notable changes to this project will be documented in this file.
 
 
-## [3.3] - 2023-11-27
+## [3.4] - 2023-11-27
 
 ### Changed
 
 - Fixed pagination bug when downloading article list
+- Fixed bug when creating EPUBs without article images
 
 
 
