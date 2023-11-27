@@ -225,11 +225,11 @@ download_article_list() {
       break
     fi
     if [ -n "$fetched" ]; then
-      article_list="$article_list$fetched\n"
+      article_list=$(printf "$article_list\n$fetched")
     fi
     offset=$((offset+24))
   done
-  article_list=${article_list:0:-2}
+  article_list=${article_list:1}
 }
 
 create_latex_for_article() {
