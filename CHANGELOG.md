@@ -7,8 +7,9 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
-- Fixed pagination bug when downloading article list
-- Fixed bug when creating EPUBs without article images
+- Fixed pagination bug when downloading article list.
+- Fixed bug when creating EPUBs without article images.
+- Will now make five attempts to download articles and article list.
 
 
 

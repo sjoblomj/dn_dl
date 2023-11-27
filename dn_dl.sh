@@ -189,7 +189,7 @@ download_article_list() {
 
   while true ; do
     echo "Downloading $offset articles"
-    fetched=$(curl -s --header "${cookie}" "${dn_address}?offset=${offset}" | awk -v before="$before" -v after="$after" '
+    fetched=$(curl -s --retry 5 --header "${cookie}" "${dn_address}?offset=${offset}" | awk -v before="$before" -v after="$after" '
     BEGIN {
       in_list = 0
       url = ""
@@ -386,10 +386,9 @@ download_article_and_imgs() {
   mkdir -p "${dirname}"
   cd "${dirname}" || exit 1
 
-  [ "$download" = "y" ] || [ ! -f "${dirname}.html" ] ; fetch_article=$?
-  if [ "$fetch_article" -eq 0 ]; then
-    curl -L -s --header "${cookie}" "${url}" > "${dirname}.html"
-  fi
+  [ "$download" = "y" ] && rm -rf "${dirname}.html"
+  curl -L -s --retry 5 --header "${cookie}" "${url}" > "${dirname}.html"
+
   ../../parser.awk "${dirname}.html" > "${dirname}.md"
 
   if [ ! -f imgs ]; then
