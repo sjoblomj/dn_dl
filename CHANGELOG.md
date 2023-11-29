@@ -3,6 +3,19 @@
 All notable changes to this project will be documented in this file.
 
 
+## [3.5] - 2023-11-29
+
+### Added
+
+- Offline support: If the script has previously been run, it is now possible to rerun the script without needing to download articles or images again.
+- Added section in Readme regarding how to fetch cookies in Chromium.
+
+### Changed
+
+- Improved section in Readme regarding how to fetch cookies in Firefox.
+
+
+
 ## [3.4] - 2023-11-27
 
 ### Changed

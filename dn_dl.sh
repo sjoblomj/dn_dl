@@ -187,6 +187,14 @@ download_article_list() {
   local fetched=""
   local result=0
 
+  curl -s "$dn_address" > /dev/null
+  if [ $? -gt 0 ] && [ -d "$output_dir" ]; then
+    # No connectivity but the target dir already exists. Rerun with the data already available.
+    local year_regex="[0-9]{4}-[0-9]{2}-[0-9]{2}"
+    article_list=$(find "$output_dir" -maxdepth 1 -mindepth 1 -type d -regextype posix-egrep -regex ".*${year_regex}_.*" -printf '%P\n' | sort -r | sed -E "s/(${year_regex})_/\1 /g")
+    return
+  fi
+
   while true ; do
     echo "Downloading $offset articles"
     fetched=$(curl -s --retry 5 --header "${cookie}" "${dn_address}?offset=${offset}" | awk -v before="$before" -v after="$after" '
@@ -387,7 +395,9 @@ download_article_and_imgs() {
   cd "${dirname}" || exit 1
 
   [ "$download" = "y" ] && rm -rf "${dirname}.html"
-  curl -L -s --retry 5 --header "${cookie}" "${url}" > "${dirname}.html"
+  if [ ! -f "${dirname}.html" ]; then
+    curl -L -s --retry 5 --header "${cookie}" "${url}" > "${dirname}.html"
+  fi
 
   ../../parser.awk "${dirname}.html" > "${dirname}.md"
 
