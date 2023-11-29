@@ -16,9 +16,17 @@ To use the script, you must have a subscription to Dagens Nyheter. Your login in
 
 Make sure you are logged in to dn.se.
 
-![Finding cookies in Firefox](ff_finding_cookies.png)
+![Finding cookies in Firefox](finding_cookies_firefox.png)
 
-In Firefox, go to Tools -> Browser tools -> Web Developer Tools. Open the Network tab. Click on the GET request to domain www.dn.se. To the right, you have the Headers tab. Scroll down to the Request Headers, and find the request header named "Cookie". Copy this value, and provide it in the `--cookie` parameter to the script.
+In Firefox, go to the menu -> Tools -> Browser tools -> Web Developer Tools (alternatively, go to the "Burger Menu" -> More Tools -> Web Developer Tools). Open the Network tab. Click on the GET request to domain www.dn.se. To the right, you have the Headers tab. Scroll down to the Request Headers section, and find the request header named "Cookie". Copy this value, and provide it in the `--cookie` parameter to the script.
+
+### Chromium
+
+Make sure you are logged in to dn.se.
+
+![Finding cookies in Chromium](finding_cookies_chromium.png)
+
+In Chromium, go to Menu -> More tools -> Developer Tools. Open the Network tab and filter by pressing the Doc button. Click on the GET request to domain www.dn.se. To the right, you have the Headers tab. Scroll down to the Request Headers section, and find the request header named "Cookie". Copy this value, and provide it in the `--cookie` parameter to the script.
 
 
 ## Tools
