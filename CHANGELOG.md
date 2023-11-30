@@ -3,6 +3,14 @@
 All notable changes to this project will be documented in this file.
 
 
+## [3.6] - 2023-11-30
+
+### Changed
+
+- For "Offline support" (i.e. when running on already downloaded articles): Will now honour the `before` and `after` parameters.
+
+
+
 ## [3.5] - 2023-11-29
 
 ### Added

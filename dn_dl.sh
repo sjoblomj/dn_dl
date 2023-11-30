@@ -15,6 +15,7 @@ output_dir=""
 mark2epub_dir=""
 before="2099-12-31"
 after="$first_year-01-01"
+year_regex="(18[0-9]{2}|19[0-9]{2}|20[0-9]{2})-(0[1-9]|1[0-2])-(0[1-9]|[1-2][0-9]|3[0-1])"
 
 print_help() {
     echo "dn_dl 3.2 by Johan Sjöblom"
@@ -123,7 +124,7 @@ for (( i=0; i<$#; i++ )); do
         ;;
     --after)
         after="${argv[i+1]}"
-        if [[ ! "$after" =~ ^(18[0-9]{2}|19[0-9]{2}|20[0-9]{2})-(0[1-9]|1[0-2])-(0[1-9]|[1-2][0-9]|3[0-1])$ ]]; then
+        if [[ ! "$after" =~ ^$year_regex$ ]]; then
             echo "Please specify date format in ISO, i.e. YYYY-MM-DD"
             exit 1
         fi
@@ -131,7 +132,7 @@ for (( i=0; i<$#; i++ )); do
         ;;
     --before)
         before="${argv[i+1]}"
-        if [[ ! "$before" =~ ^(18[0-9]{2}|19[0-9]{2}|20[0-9]{2})-(0[1-9]|1[0-2])-(0[1-9]|[1-2][0-9]|3[0-1])$ ]]; then
+        if [[ ! "$before" =~ ^$year_regex$ ]]; then
             echo "Please specify date format in ISO, i.e. YYYY-MM-DD"
             exit 1
         fi
@@ -190,8 +191,7 @@ download_article_list() {
   curl -s "$dn_address" > /dev/null
   if [ $? -gt 0 ] && [ -d "$output_dir" ]; then
     # No connectivity but the target dir already exists. Rerun with the data already available.
-    local year_regex="[0-9]{4}-[0-9]{2}-[0-9]{2}"
-    article_list=$(find "$output_dir" -maxdepth 1 -mindepth 1 -type d -regextype posix-egrep -regex ".*${year_regex}_.*" -printf '%P\n' | sort -r | sed -E "s/(${year_regex})_/\1 /g")
+    article_list=$(find "$output_dir" -maxdepth 1 -mindepth 1 -type d -regextype posix-egrep -regex ".*${year_regex}_.*" -printf '%P\n' | sort -r | awk -v before="$before" -v after="$after" '{sub("_", " "); if ($0 >= after && $0 <= before) print $0}')
     return
   fi
 
