@@ -184,7 +184,7 @@ fi
 
 
 download_article_list() {
-  local offset=0
+  local page=1
   local fetched=""
   local result=0
 
@@ -196,29 +196,29 @@ download_article_list() {
   fi
 
   while true ; do
-    echo "Downloading $offset articles"
-    fetched=$(curl -s --retry 5 --header "${cookie}" "${dn_address}?offset=${offset}" | awk -v before="$before" -v after="$after" '
+    echo "Downloading page $page of articles"
+    fetched=$(curl -s --retry 5 --header "${cookie}" "${dn_address}?page=${page}" | awk -v before="$before" -v after="$after" '
     BEGIN {
       in_list = 0
       url = ""
       found_articles = 0
     }
     {
-      if ($0 ~ "<div class=\"timeline-page__listing\">") {
+      if ($0 ~ "<main class=\"page section\">") {
         url = ""
         in_list = 1
       }
-      if ($0 ~ "<div class=\"pagination")
+      if ($0 ~ "<nav class=\"ds-pagination")
         in_list = 0
-      if ($0 ~ "<a href" && in_list) {
-        sub(/ *<a href="/, "", $0)
+      if ($0 ~ "<a .*href=" && in_list) {
+        sub(/ *<a .*href="/, "", $0)
         sub(/" .*/, "", $0)
         sub(/\/$/, "", $0)
         url = "https://www.dn.se" $0
       }
-      if ($0 ~ "<time " && in_list) {
-        sub(/.*="/, "", $0)
-        sub(/T.*/, "", $0)
+      if ($0 ~ " [0-9]{4}-[0-9]{2}-[0-9]{2} • *" && in_list) {
+        sub(/ */, "", $0)
+        sub(/ • */, "", $0)
         if ($0 >= after && $0 <= before)
           print $0 " " url
         found_articles = 1
@@ -235,7 +235,7 @@ download_article_list() {
     if [ -n "$fetched" ]; then
       article_list=$(printf "$article_list\n$fetched")
     fi
-    offset=$((offset+24))
+    page=$((page+1))
   done
   article_list=${article_list:1}
 }
@@ -384,7 +384,6 @@ create_epub() {
 download_article_and_imgs() {
   local dirname="${1}"
   local url="${2}"
-  local fetch_article=0
   local fetch_img=0
   local origimg=""
   local imgname=""

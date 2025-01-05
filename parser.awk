@@ -46,9 +46,9 @@ BEGIN {
             Published = get_argument_value($0, "datetime")
             if (Debug) print "Read Published '" Published "'" > "/dev/stderr"
         }
-        if ($0 ~ "<div class=\"article__lead\">") {
+        if ($0 ~ "<div class=\"article__lead") {
             Lead = $0
-            sub(/ *<div class="article__lead">/, "", Lead)
+            sub(/ *<div class="article__lead[^>]*>/, "", Lead)
             sub(/<\/div>/, "", Lead)
             if (Debug) print "Read Lead '" Lead "'" > "/dev/stderr"
         }
@@ -96,31 +96,33 @@ BEGIN {
             body = ""
         }
 
-        if (body ~ "<div class=\"ds-byline__titles\">") {
+        if (body ~ "<ul class=\"bylines__list\">") {
             if (Debug) print "Is reading author" > "/dev/stderr"
             Is_reading_author = 1
             body = ""
 
-        } else if (body ~ "<span class=\"ds-byline__title\">" && Is_reading_author) {
-            sub(/<span class="ds-byline__title">/, "", body)
+        } else if (body ~ "<span class=\"ds-list-item__title" && Is_reading_author) {
+            sub(/<span class="ds-list-item__title[^>]*>/, "", body)
             sub(/<\/span>/, "", body)
             Auth = body
             body = ""
-            if (Debug) print "Read Author '" Auth "'" > "/dev/stderr"
+            if (Debug) print "Read Author name: '" Auth "'" > "/dev/stderr"
 
-        } else if (body ~ "<span class=\"ds-byline__subtitle\">" && Is_reading_author) {
-            sub(/<span class="ds-byline__subtitle">/, "", body)
+        } else if (body ~ "<span class=\"ds-list-item__subtitle" && Is_reading_author) {
+            sub(/<span class="ds-list-item__subtitle[^>]*>/, "", body)
             sub(/<\/span>/, "", body)
             Auth = Auth " (" body ")"
             body = ""
-            if (Debug) print "Read Author '" Auth "'" > "/dev/stderr"
+            if (Debug) print "Read Author with title: '" Auth "'" > "/dev/stderr"
 
-        } else if (body ~ "</div>" && Is_reading_author) {
-            Is_reading_author = 0
+        } else if (body ~ "</li>" && Is_reading_author) {
             body = ""
             delim = (Authors != "") ? ", " : ""
             Authors = Authors delim Auth
-            if (Debug) print "No longer reading author. Authors '" Authors "'" > "/dev/stderr"
+            if (Debug) print "Read Author. Authors: '" Authors "'" > "/dev/stderr"
+        } else if (body ~ "</ul>" && Is_reading_author) {
+            Is_reading_author = 0
+            if (Debug) print "No longer reading authors. Authors: '" Authors "'" > "/dev/stderr"
         }
 
         if (body ~ "<blockquote " && !Is_reading_embed) {
@@ -139,12 +141,12 @@ BEGIN {
             body = "> *" body "*"
         }
 
-        if (body ~ "<div class=\"article__body\">") {
+        if (body ~ "<div class=\"article__body\"") {
             if (Debug) print "Is reading body" > "/dev/stderr"
             Is_reading_body = 1
             body = ""
         }
-        if (body ~ "<footer class=\"article__footer\">") {
+        if (body ~ "<footer class=\"article__footer\"") {
             if (Debug) print "No longer reading body or article" > "/dev/stderr"
             Is_reading_body = 0
             Is_reading_article = 0
@@ -205,7 +207,7 @@ BEGIN {
             Is_reading_cap = 1
             body = ""
         } else if (body ~ "<img" && Is_reading_slideshow) {
-            if (Debug) print "Is reading img" > "/dev/stderr"
+            if (Debug) print "Is reading img in slideshow" > "/dev/stderr"
             Is_reading_img = 1
         } else if (body !~ "</figure" && Is_reading_slideshow) {
             if (Debug) print "Is reading slideshow and skipping line" > "/dev/stderr"
@@ -242,7 +244,7 @@ BEGIN {
             Is_reading_cap = 0
             body = ""
         }
-        if (body ~ "<span aria-hidden=\"true\">" && Is_reading_cap) {
+        if (body ~ "<span>" && Is_reading_cap) {
             body = substr(body, index(body, ">") + 1)
             body = substr(body, 0, index(body, "<") - 1)
             body = trim(body)
@@ -337,6 +339,8 @@ function html_to_commonmark(text) {
     gsub(/<\/p>/, "\n", text)
     gsub(/ ?<em> ?/, " *", text)
     gsub(/<\/em>/, "*", text)
+    gsub(/ ?<i> ?/, " *", text)
+    gsub(/<\/i>/, "*", text)
     gsub(/ ?<strong> ?/, " **", text)
     gsub(/<\/strong>/, "**", text)
     gsub(/\n +/, "\n", text)
