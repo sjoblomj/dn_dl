@@ -3,6 +3,14 @@
 All notable changes to this project will be documented in this file.
 
 
+## [3.7] - 2025-01-05
+
+### Changed
+
+- Updated parser to reflect new layout on dn.se
+
+
+
 ## [3.6] - 2023-11-30
 
 ### Changed
