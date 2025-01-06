@@ -72,6 +72,8 @@ BEGIN {
         } else if (body ~ "<h2" && Is_reading_factbox) {
             sub(/ *<h2 class="ds-factbox__title">/, "", body)
             sub(/<\/h2>/, "", body)
+            sub(/ *<span[^>]*>/, "", body)
+            sub(/<\/span>/, " ", body)
             Fb_title = body
             body = ""
             if (Debug) print "Read Fb_title" Fb_title > "/dev/stderr"
@@ -206,6 +208,10 @@ BEGIN {
             if (Debug) print "Is reading cap" > "/dev/stderr"
             Is_reading_cap = 1
             body = ""
+        } else if (body ~ "<div class=\"graphic__source\">" && Is_reading_img) {
+            if (Debug) print "Is reading graphic source" > "/dev/stderr"
+            Is_reading_cap = 1
+            body = ""
         } else if (body ~ "<img" && Is_reading_slideshow) {
             if (Debug) print "Is reading img in slideshow" > "/dev/stderr"
             Is_reading_img = 1
@@ -214,7 +220,7 @@ BEGIN {
             body = ""
         }
 
-        if (body ~ "<figure class=\"ds-article-image" || (body ~ "<figure class=\"slideshow__figure\">" && Is_reading_slideshow)) {
+        if (body ~ "<figure class=\"ds-article-image" || body ~ "<figure class=\"single-graphic\">" || (body ~ "<figure class=\"slideshow__figure\">" && Is_reading_slideshow)) {
             if (Debug) print "Is reading img" > "/dev/stderr"
             Is_reading_img = 1
             body = ""
@@ -222,7 +228,11 @@ BEGIN {
         if (body ~ "<img " && Is_reading_img) {
             src  = get_argument_value(body, "src")
             pos  = index(src, "?")
-            src  = substr(src, 0, pos - 1)
+            if (pos != 0) {
+                src  = substr(src, 0, pos - 1)
+            } else {
+                if (Debug) print "Warning: Image src does not contain \"?\", which is unusual. src: '" src "'" > "/dev/stderr"
+            }
             print src >> "imgs"
             gsub(/[\/:]/, "_", src)
 
@@ -230,7 +240,7 @@ BEGIN {
             body = ""
             if (Debug) print "Is reading Img: '" Img "'" > "/dev/stderr"
         }
-        if ((body ~ "<div class=\"picture" || body ~ "<div class=\"ds-full-width-element" || body ~ "</div>") && Is_reading_img) {
+        if ((body ~ "<div class=\"picture" || body ~ "<div class=\"single-graphic__inner\">" || body ~ "<div class=\"ds-full-width-element" || body ~ "</div>") && Is_reading_img) {
             if (Debug) print "Is reading img, skipping line" > "/dev/stderr"
             body = ""
         }
@@ -260,6 +270,17 @@ BEGIN {
             body = ""
             if (Debug) print "Is reading cred, Img: '" Img "'" > "/dev/stderr"
         }
+        if (body ~ "</div>" && Is_reading_cap) {
+            Is_reading_cap = 0
+            body = ""
+            if (Debug) print "No longer reading cap" > "/dev/stderr"
+        }
+        if (body != "" && Is_reading_cap) {
+            body = trim(body)
+            Img  = Img " credits=\"" body "\""
+            body = ""
+            if (Debug) print "Is reading cred, Img: '" Img "'" > "/dev/stderr"
+        }
         if (body ~ "</figure>") {
             Is_reading_img = 0
             Img  = Img " />"
@@ -268,7 +289,7 @@ BEGIN {
                 caption = " \"" caption "\""
             body = "![" get_argument_value(Img, "credits") "](" get_argument_value(Img, "src") caption ")"
             if (body != "![]()" && !Is_reading_body)
-                Article_img = Article_img "\n" body
+                Article_img = Article_img "\n" body "\n"
             if (Debug) print "Read figure '" body "', Article_img '" Article_img "'" > "/dev/stderr"
         }
 
@@ -327,6 +348,7 @@ function transform_hyperlink(text,  tmp, pos_s, pos_c, pos_e, url) {
 }
 
 function post_process() {
+    Lead = transform_hyperlink(Lead)
     Lead = html_to_commonmark(Lead)
     Article = html_to_commonmark(Article)
 }
@@ -350,7 +372,7 @@ function html_to_commonmark(text) {
 
 function get_argument_value(text, argument,  pos) {
     argument = argument "="
-    pos = index (text, argument)
+    pos = index(text, argument)
     if (pos == 0)
         return ""
     text = substr(text, pos + length(argument) + 1)

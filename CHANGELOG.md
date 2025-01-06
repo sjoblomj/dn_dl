@@ -3,6 +3,14 @@
 All notable changes to this project will be documented in this file.
 
 
+## [3.8] - 2025-01-06
+
+### Changed
+
+- Updated parser to reflect new layout on dn.se
+
+
+
 ## [3.7] - 2025-01-05
 
 ### Changed
@@ -140,7 +148,7 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
-- Can now optionally run multiple passes of PDF creation, where it attempts to reduce the images of an article somewhat. If the image reduction results in fewer pages, the images are kept smaller; if the number of pages are the same, then the original sizeof the images are kept.
+- Can now optionally run multiple passes of PDF creation, where it attempts to reduce the images of an article somewhat. If the image reduction results in fewer pages, the images are kept smaller; if the number of pages are the same, then the original size of the images are kept.
 
 
 
